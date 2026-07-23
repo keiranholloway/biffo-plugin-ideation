@@ -5,6 +5,14 @@
   "author": "Biffo Team",
   "tags": ["ideation", "agentic", "product", "prd"],
   "required_core_version": ">=0.70.0",
+  "core_capabilities": {
+    "chat-turn": "^1",
+    "agent-run-request": "^1",
+    "run-output-tool": "^1",
+    "owner-scoped-tables": "^1",
+    "chat-agent-registry": "^1",
+    "event:agent.run.completed": "^1"
+  },
   "tables": [
     {
       "name": "ideation_sessions",
