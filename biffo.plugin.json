@@ -1,0 +1,117 @@
+{
+  "name": "ideation",
+  "version": "0.1.0",
+  "description": "Ideation Engine — an agentic chatbot that pressure-tests a founder's idea over a short guided conversation (3–5 turns), then produces a high-level PRD and a viability scorecard (competitive landscape, build-vs-buy, complexity, economic moat, market fit). A user-facing product module for approved founders, built on ADR-0016's synchronous run/thread spine.",
+  "author": "Biffo Team",
+  "tags": ["ideation", "agentic", "product", "prd"],
+  "required_core_version": ">=0.70.0",
+  "tables": [
+    {
+      "name": "ideation_sessions",
+      "columns": [
+        {
+          "name": "owner_sub",
+          "type": "String(64)",
+          "nullable": false,
+          "description": "Cognito sub of the founder who owns this session. All reads/writes are owner-scoped by the module's Lambda; the tables are NOT exposed via generic CRUD (which is tenant-scoped, not owner-scoped)."
+        },
+        {
+          "name": "title",
+          "type": "String(200)",
+          "nullable": true,
+          "description": "Short human label, derived from the idea."
+        },
+        {
+          "name": "seed_idea",
+          "type": "Text",
+          "nullable": false,
+          "description": "The founder's initial idea, verbatim (carried from the landing page / typed here)."
+        },
+        {
+          "name": "status",
+          "type": "String(20)",
+          "nullable": true,
+          "description": "gathering | analysing | complete. Nullable because the generated migration DDL does not apply declared defaults (only the in-process model) — the module sets it explicitly on create."
+        },
+        {
+          "name": "thread_id",
+          "type": "String(36)",
+          "nullable": true,
+          "description": "The agent-run thread (ADR-0016 §2) that carries the chat transcript. The conversation lives in the runs, assembled via the Core thread-messages read — NOT duplicated here."
+        },
+        {
+          "name": "turn_count",
+          "type": "Integer",
+          "nullable": true,
+          "description": "User turns taken so far; enforces the 3–5 requirement-gathering cap."
+        },
+        {
+          "name": "analysis_run_id",
+          "type": "String(36)",
+          "nullable": true,
+          "description": "The async agent-runtime run that produced the report (set on finalise)."
+        }
+      ],
+      "indexes": [
+        { "name": "idx_ideation_sessions_owner", "columns": ["tenant_id", "owner_sub"] },
+        { "name": "idx_ideation_sessions_thread", "columns": ["tenant_id", "thread_id"] }
+      ],
+      "permissions": {
+        "list": { "allowed": false },
+        "read": { "allowed": false },
+        "create": { "allowed": false },
+        "update": { "allowed": false },
+        "delete": { "allowed": false }
+      }
+    },
+    {
+      "name": "ideation_reports",
+      "columns": [
+        {
+          "name": "session_id",
+          "type": "String(36)",
+          "nullable": false,
+          "description": "The ideation_sessions row this report belongs to."
+        },
+        {
+          "name": "prd",
+          "type": "JSON",
+          "nullable": true,
+          "description": "The high-level PRD (shape: ideation.definitions.PRD)."
+        },
+        {
+          "name": "scorecard",
+          "type": "JSON",
+          "nullable": true,
+          "description": "The viability scorecard (shape: ideation.definitions.Scorecard)."
+        },
+        {
+          "name": "model",
+          "type": "String(100)",
+          "nullable": true,
+          "description": "The model that produced this report."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ideation_reports_session",
+          "columns": ["tenant_id", "session_id"],
+          "unique": true
+        }
+      ],
+      "permissions": {
+        "list": { "allowed": false },
+        "read": { "allowed": false },
+        "create": { "allowed": false },
+        "update": { "allowed": false },
+        "delete": { "allowed": false }
+      }
+    }
+  ],
+  "api_routes": [],
+  "event_subscriptions": [],
+  "ui_components": [],
+  "dependencies": {
+    "biffo-plugin-sdk": "^1.0"
+  }
+}

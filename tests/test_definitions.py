@@ -1,0 +1,104 @@
+"""The agent definitions: prompts, scored axes, and structured-output schema."""
+
+import json
+from pathlib import Path
+
+import pytest
+from ideation.definitions import (
+    MAX_TURNS,
+    MIN_TURNS,
+    REPORT_TOOL_NAME,
+    PRD,
+    Report,
+    Scorecard,
+    ScoreAxis,
+    analyst_definition,
+    challenger_definition,
+    report_tool_schema,
+)
+
+
+def test_scorecard_covers_every_requested_axis() -> None:
+    fields = Scorecard.model_fields
+    for axis in ("viability", "complexity", "economic_moat", "market_fit"):
+        assert axis in fields, axis
+    # …plus the competitive/build-vs-buy view the founder asked for.
+    assert "build_vs_buy" in fields
+    assert "competitors" in fields
+    assert "summary" in fields
+
+
+def test_scores_are_bounded_one_to_five() -> None:
+    ScoreAxis(score=1, rationale="ok")
+    ScoreAxis(score=5, rationale="ok")
+    with pytest.raises(Exception):
+        ScoreAxis(score=0, rationale="too low")
+    with pytest.raises(Exception):
+        ScoreAxis(score=6, rationale="too high")
+
+
+def test_challenger_is_a_single_turn_conversation_agent() -> None:
+    d = challenger_definition(model="anthropic/claude-sonnet-4")
+    assert d["tools"] == []  # conversation only, no tools
+    assert (
+        d["max_turns"] == 1
+    )  # one reply per user message; the 3–5 cap is the session's
+    instr = d["instructions"].lower()
+    assert "one question per turn" in instr
+    assert str(MAX_TURNS) in d["instructions"] and str(MIN_TURNS) in d["instructions"]
+
+
+def test_analyst_researches_then_returns_structured_output() -> None:
+    d = analyst_definition(model="anthropic/claude-opus-4-8")
+    assert "web_search" in d["tools"]
+    assert REPORT_TOOL_NAME in d["tools"]
+    instr = d["instructions"].lower()
+    assert "build-vs-buy" in instr
+    assert "competitive landscape" in instr
+
+
+def test_report_tool_schema_is_the_report_model() -> None:
+    schema = report_tool_schema()
+    assert schema["type"] == "function"
+    assert schema["function"]["name"] == REPORT_TOOL_NAME
+    params = schema["function"]["parameters"]
+    assert set(params["properties"]) >= {"prd", "scorecard"}
+    # It must be serialisable — it's sent to the provider verbatim.
+    json.dumps(schema)
+
+
+def test_report_round_trips() -> None:
+    report = Report(
+        prd=PRD(
+            problem="Independent coaches can't manage clients + payments in one place."
+        ),
+        scorecard=Scorecard(
+            viability=ScoreAxis(score=4, rationale="Real recurring pain."),
+            complexity=ScoreAxis(score=3, rationale="CRUD + payments; moderate."),
+            economic_moat=ScoreAxis(score=2, rationale="Low switching costs."),
+            market_fit=ScoreAxis(score=4, rationale="Large fragmented market."),
+            build_vs_buy="Build — existing tools don't fit the coaching workflow.",
+            competitors=[],
+            summary="Promising; defensibility is the open question.",
+        ),
+    )
+    assert report.scorecard.viability.score == 4
+    assert report.prd.problem.startswith("Independent coaches")
+
+
+def test_manifest_declares_the_two_tables() -> None:
+    manifest = json.loads(
+        (Path(__file__).resolve().parents[1] / "biffo.plugin.json").read_text()
+    )
+    tables = {t["name"] for t in manifest["tables"]}
+    assert tables == {"ideation_sessions", "ideation_reports"}
+    session_cols = {
+        c["name"]
+        for t in manifest["tables"]
+        if t["name"] == "ideation_sessions"
+        for c in t["columns"]
+    }
+    assert (
+        "thread_id" in session_cols
+    )  # transcript lives in the run thread, not a messages table
+    assert "ideation_messages" not in tables

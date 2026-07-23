@@ -1,0 +1,23 @@
+[project]
+name = "biffo-plugin-ideation"
+version = "0.1.0"
+description = "Ideation Engine — an agentic module that pressure-tests a founder's idea and produces a PRD + viability scorecard. A user-facing Biffo module (ADR-0003 plugin + ADR-0016 sync run/thread spine)."
+requires-python = ">=3.13"
+# NOTE: the Lambda (chat orchestration on the ADR-0016 Function-URL spine) will
+# add `biffo-plugin-sdk`, `aws-lambda-powertools[tracer]` and `httpx` once the
+# spine has landed. The data model (biffo.plugin.json) and the agent definitions
+# below depend only on pydantic, so they can be authored and tested now.
+dependencies = ["pydantic>=2.10.4"]
+
+[dependency-groups]
+dev = ["pytest>=8.3.4", "ruff>=0.8.0", "pyright>=1.1.0", "jsonschema>=4.23.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ideation"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
