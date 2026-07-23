@@ -72,3 +72,15 @@ def test_all_tables_stay_crud_closed() -> None:
             not perms[action]["allowed"]
             for action in ("list", "read", "create", "update", "delete")
         ), f"{table['name']} must keep all CRUD permissions closed"
+
+
+def test_every_table_is_owner_scoped_on_a_real_column() -> None:
+    # Each table opts into service-auth owner-scoped access (ADR-0017 §5) on a
+    # column it actually declares, granted to this module's own principal.
+    for table in _manifest()["tables"]:
+        access = table["owner_scoped_service"]
+        assert access["allowed_principals"] == ["system:ideation"]
+        column_names = {c["name"] for c in table["columns"]}
+        assert access["owner_column"] in column_names, (
+            f"{table['name']} owner_column must be a declared column"
+        )

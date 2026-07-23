@@ -10,6 +10,13 @@ ANALYSING = "analysing"  # finalised; the async analysis run is in flight
 COMPLETE = "complete"  # the report is ready
 STATUSES = frozenset({GATHERING, ANALYSING, COMPLETE})
 
+# Terminal states of the async analysis run (Core's AgentRun, ADR-0014). Read when
+# a founder polls: a completed run is materialised into the report, a failed one is
+# surfaced as an error.
+RUN_COMPLETED = "completed"
+RUN_FAILED = "failed"
+RUN_TERMINAL = frozenset({RUN_COMPLETED, RUN_FAILED})
+
 
 @dataclass(frozen=True)
 class Session:
@@ -23,6 +30,18 @@ class Session:
     turn_count: int
     analysis_run_id: str | None = None
     title: str | None = None
+
+
+@dataclass(frozen=True)
+class Run:
+    """A read of the async analysis run (Core's AgentRun) — just what the plugin
+    needs to materialise the report: its terminal status, the transcript to extract
+    the ``submit_ideation_report`` tool call from, and the model that produced it."""
+
+    id: str
+    status: str
+    messages: list[dict[str, object]]
+    model: str | None = None
 
 
 @dataclass(frozen=True)

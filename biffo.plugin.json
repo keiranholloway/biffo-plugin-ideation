@@ -70,11 +70,21 @@
         "create": { "allowed": false },
         "update": { "allowed": false },
         "delete": { "allowed": false }
+      },
+      "owner_scoped_service": {
+        "owner_column": "owner_sub",
+        "allowed_principals": ["system:ideation"]
       }
     },
     {
       "name": "ideation_reports",
       "columns": [
+        {
+          "name": "owner_sub",
+          "type": "String(64)",
+          "nullable": false,
+          "description": "Cognito sub of the founder who owns this report — the owner-scope column for service access (ADR-0017 §5). Denormalised from the session so reports are owner-scoped uniformly, without a join."
+        },
         {
           "name": "session_id",
           "type": "String(36)",
@@ -105,7 +115,8 @@
           "name": "idx_ideation_reports_session",
           "columns": ["tenant_id", "session_id"],
           "unique": true
-        }
+        },
+        { "name": "idx_ideation_reports_owner", "columns": ["tenant_id", "owner_sub"] }
       ],
       "permissions": {
         "list": { "allowed": false },
@@ -113,6 +124,10 @@
         "create": { "allowed": false },
         "update": { "allowed": false },
         "delete": { "allowed": false }
+      },
+      "owner_scoped_service": {
+        "owner_column": "owner_sub",
+        "allowed_principals": ["system:ideation"]
       }
     }
   ],

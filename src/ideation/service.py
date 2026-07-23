@@ -29,7 +29,15 @@ from .definitions import (
     analyst_definition,
     report_tool_schema,
 )
-from .models import ANALYSING, COMPLETE, GATHERING, Session, TurnResult
+from .models import (
+    ANALYSING,
+    COMPLETE,
+    GATHERING,
+    RUN_COMPLETED,
+    RUN_TERMINAL,
+    Session,
+    TurnResult,
+)
 from .ports import CoreGateway
 
 
@@ -55,6 +63,10 @@ class NotEnoughTurns(IdeationError):
 
 class MalformedReport(IdeationError):
     """The analysis run finished without a valid structured report."""
+
+
+class AnalysisFailed(IdeationError):
+    """The async analysis run failed; there is no report to produce."""
 
 
 def extract_report(run_messages: list[dict[str, Any]]) -> Report:
@@ -163,30 +175,43 @@ class IdeationService:
         )
         return run_id
 
-    async def complete_analysis(
-        self,
-        *,
-        session_id: str,
-        run_messages: list[dict[str, Any]],
-        model: str | None = None,
-    ) -> None:
-        """Called when the analysis run completes (the ``agent.run.completed``
-        subscriber): extract the structured report from the run, store it, and
-        mark the session complete."""
-        report = extract_report(run_messages)
+    async def get_report(
+        self, *, owner_sub: str, session_id: str
+    ) -> dict[str, Any] | None:
+        """The founder's report, or ``None`` while still gathering/analysing.
+
+        This is where the analysis run is *materialised into the report* — lazily,
+        on the founder's own poll, rather than pushed from an event subscriber. The
+        chosen §5 trust model derives the owner from the founder's forwarded token,
+        so every write must happen inside a founder request; a founder polling for
+        their report is exactly such a request. Once complete the write is not
+        repeated.
+
+        Raises :class:`AnalysisFailed` if the run failed, and :class:`MalformedReport`
+        if it finished without a valid structured report.
+        """
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.status == COMPLETE:
+            return await self._core.get_report(session_id=session_id)
+        if session.status != ANALYSING or session.analysis_run_id is None:
+            return None  # still gathering, or not finalised
+
+        run = await self._core.get_run(run_id=session.analysis_run_id)
+        if run is None or run.status not in RUN_TERMINAL:
+            return None  # the analysis is still in flight
+        if run.status != RUN_COMPLETED:
+            raise AnalysisFailed(session_id)
+
+        # Terminal + completed: extract, store, and mark complete — all under this
+        # founder's request. `save_report` sends no owner; Core stamps it from the
+        # forwarded token (ADR-0017 §5), so the report is owner-scoped like the
+        # session.
+        report = extract_report(run.messages)
         await self._core.save_report(
             session_id=session_id,
             prd=report.prd.model_dump(),
             scorecard=report.scorecard.model_dump(),
-            model=model,
+            model=run.model,
         )
         await self._core.set_status(session_id=session_id, status=COMPLETE)
-
-    async def get_report(
-        self, *, owner_sub: str, session_id: str
-    ) -> dict[str, Any] | None:
-        """The founder's report, or ``None`` while still gathering/analysing."""
-        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
-        if session.status != COMPLETE:
-            return None
         return await self._core.get_report(session_id=session_id)
