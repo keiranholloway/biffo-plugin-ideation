@@ -1,16 +1,19 @@
-"""The orchestration logic, exercised end-to-end against in-memory fakes."""
+"""The orchestration logic, exercised end-to-end against an in-memory fake Core."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
 import pytest
-from ideation.definitions import REPORT_TOOL_NAME
-from ideation.models import ANALYSING, COMPLETE, GATHERING, Session, StreamChunk, Usage
+from ideation.definitions import (
+    CHALLENGER_AGENT_NAME,
+    CHALLENGER_INSTRUCTIONS,
+    REPORT_TOOL_NAME,
+)
+from ideation.models import ANALYSING, COMPLETE, GATHERING, Session, TurnResult
 from ideation.service import (
     IdeationService,
     MalformedReport,
@@ -23,11 +26,17 @@ from ideation.service import (
 
 
 class FakeCore:
-    def __init__(self) -> None:
+    """Stands in for Core's buffered chat spine + data API. ``run_chat_turn`` does
+    what the trusted spine does — appends the exchange to the thread and returns a
+    reply — so the plugin never assembles or fences here."""
+
+    def __init__(self, replies: list[str] | None = None) -> None:
         self.sessions: dict[str, Session] = {}
         self.threads: dict[str, list[dict[str, Any]]] = {}
         self.reports: dict[str, dict[str, Any]] = {}
+        self.turn_calls: list[dict[str, Any]] = []
         self.analysis_requests: list[dict[str, Any]] = []
+        self._replies = replies or ["Why now?"]
         self._seq = 0
 
     async def create_session(
@@ -66,36 +75,53 @@ class FakeCore:
             analysis_run_id=analysis_run_id or current.analysis_run_id,
         )
 
-    async def thread_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
-        return list(self.threads.get(thread_id, []))
-
-    async def record_turn(
+    async def run_chat_turn(
         self,
         *,
         thread_id: str,
         owner_sub: str,
-        definition: dict[str, Any],
-        user_message: str,
-        assistant_message: str,
-        usage: object | None,
-    ) -> None:
+        agent_name: str,
+        system_prompt: str,
+        user_text: str,
+        model: str,
+    ) -> TurnResult:
+        self.turn_calls.append(
+            {
+                "thread_id": thread_id,
+                "owner_sub": owner_sub,
+                "agent_name": agent_name,
+                "system_prompt": system_prompt,
+                "user_text": user_text,
+                "model": model,
+            }
+        )
+        idx = len(self.turn_calls) - 1
+        reply = self._replies[idx] if idx < len(self._replies) else self._replies[-1]
+        # the spine persists the exchange in the thread
         self.threads.setdefault(thread_id, []).extend(
             [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": assistant_message},
+                {"role": "user", "content": user_text},
+                {"role": "assistant", "content": reply},
             ]
         )
+        return TurnResult(reply=reply, model=model, output_tokens=len(reply))
 
     async def request_analysis(
         self,
         *,
         thread_id: str,
         owner_sub: str,
+        agent_name: str,
         definition: dict[str, Any],
-        conversation: list[dict[str, Any]],
+        output_tool: dict[str, Any],
     ) -> str:
         self.analysis_requests.append(
-            {"thread_id": thread_id, "conversation": conversation}
+            {
+                "thread_id": thread_id,
+                "agent_name": agent_name,
+                "definition": definition,
+                "output_tool": output_tool,
+            }
         )
         return "run-analysis-1"
 
@@ -113,38 +139,8 @@ class FakeCore:
         return self.reports.get(session_id)
 
 
-class FakeStreamer:
-    def __init__(self, deltas: list[str]) -> None:
-        self.deltas = deltas
-        self.calls: list[dict[str, Any]] = []
-
-    def stream(
-        self, *, model: str, messages: list[dict[str, Any]]
-    ) -> AsyncIterator[StreamChunk]:
-        self.calls.append({"model": model, "messages": messages})
-
-        async def _gen() -> AsyncIterator[StreamChunk]:
-            for delta in self.deltas:
-                yield StreamChunk(delta=delta)
-            yield StreamChunk(
-                done=Usage(
-                    content="".join(self.deltas),
-                    model=model,
-                    output_tokens=len(self.deltas),
-                )
-            )
-
-        return _gen()
-
-
-def _service(core: FakeCore, streamer: FakeStreamer, **kw: Any) -> IdeationService:
-    return IdeationService(
-        core, streamer, chat_model="chat/m", analysis_model="analysis/m", **kw
-    )
-
-
-async def _collect(agen: AsyncIterator[str]) -> list[str]:
-    return [chunk async for chunk in agen]
+def _service(core: FakeCore, **kw: Any) -> IdeationService:
+    return IdeationService(core, chat_model="chat/m", analysis_model="analysis/m", **kw)
 
 
 def _report_payload(problem: str = "A real problem.") -> dict[str, Any]:
@@ -190,88 +186,71 @@ def _analysis_run(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 class TestChat:
     def test_start_opens_a_gathering_session_with_a_thread(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer([])
-        svc = _service(core, streamer)
+        svc = _service(FakeCore())
         session = asyncio.run(svc.start_session(owner_sub="u", seed_idea="  an idea  "))
         assert session.status == GATHERING
         assert session.turn_count == 0
         assert session.thread_id  # a run thread was allocated
         assert session.seed_idea == "an idea"  # trimmed
 
-    def test_turn_streams_records_and_advances_the_counter(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["Wh", "y now?"])
-        svc = _service(core, streamer)
+    def test_turn_drives_the_spine_and_advances_the_counter(self) -> None:
+        core = FakeCore(replies=["Why now?"])
+        svc = _service(core)
 
-        async def scenario() -> tuple[Session, list[str]]:
+        async def scenario() -> tuple[Session, TurnResult]:
             s = await svc.start_session(owner_sub="u", seed_idea="an idea")
-            deltas = await _collect(
-                svc.chat_turn(
-                    owner_sub="u", session_id=s.id, user_message="It helps coaches."
-                )
+            result = await svc.chat_turn(
+                owner_sub="u", session_id=s.id, user_message="It helps coaches."
             )
-            return core.sessions[s.id], deltas
+            return core.sessions[s.id], result
 
-        session, deltas = asyncio.run(scenario())
-        # streamed to the caller
-        assert deltas == ["Wh", "y now?"]
-        # context: system carries the idea; the user's message is last
-        sent = streamer.calls[0]["messages"]
-        assert sent[0]["role"] == "system" and "an idea" in sent[0]["content"]
-        assert sent[-1] == {"role": "user", "content": "It helps coaches."}
-        # the turn was recorded to the thread and the counter advanced
+        session, result = asyncio.run(scenario())
+        # the buffered reply came back whole
+        assert result.reply == "Why now?"
+        # exactly one spine call, with the plugin's prompt + the founder's RAW text
+        assert len(core.turn_calls) == 1
+        call = core.turn_calls[0]
+        assert call["agent_name"] == CHALLENGER_AGENT_NAME
+        assert call["system_prompt"] == CHALLENGER_INSTRUCTIONS
+        assert call["user_text"] == "It helps coaches."  # unfenced — Core fences it
+        assert call["model"] == "chat/m"
+        # the counter advanced
         assert session.turn_count == 1
-        assert core.threads[session.thread_id] == [
-            {"role": "user", "content": "It helps coaches."},
-            {"role": "assistant", "content": "Why now?"},
-        ]
 
-    def test_second_turn_includes_prior_history_as_context(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["ok"])
-        svc = _service(core, streamer)
+    def test_the_seed_idea_never_enters_the_system_prompt(self) -> None:
+        # regression: the founder's idea is untrusted; it must not be concatenated
+        # into the trusted instruction channel. It enters as the first user turn.
+        core = FakeCore()
+        svc = _service(core)
 
         async def scenario() -> None:
-            s = await svc.start_session(owner_sub="u", seed_idea="idea")
-            await _collect(
-                svc.chat_turn(owner_sub="u", session_id=s.id, user_message="first")
-            )
-            await _collect(
-                svc.chat_turn(owner_sub="u", session_id=s.id, user_message="second")
+            s = await svc.start_session(owner_sub="u", seed_idea="SECRET-SEED")
+            await svc.chat_turn(
+                owner_sub="u", session_id=s.id, user_message="SECRET-SEED"
             )
 
         asyncio.run(scenario())
-        # the second call saw the first turn's user+assistant messages
-        second_context = streamer.calls[1]["messages"]
-        contents = [m["content"] for m in second_context]
-        assert "first" in contents and "second" in contents
+        assert "SECRET-SEED" not in core.turn_calls[0]["system_prompt"]
+        assert core.turn_calls[0]["user_text"] == "SECRET-SEED"
 
     def test_turn_cap_is_enforced(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["x"])
-        svc = _service(core, streamer, max_turns=2)
+        svc = _service(FakeCore(), max_turns=2)
 
         async def scenario() -> None:
             s = await svc.start_session(owner_sub="u", seed_idea="idea")
-            await _collect(
-                svc.chat_turn(owner_sub="u", session_id=s.id, user_message="1")
-            )
-            await _collect(
-                svc.chat_turn(owner_sub="u", session_id=s.id, user_message="2")
-            )
-            await _collect(
-                svc.chat_turn(owner_sub="u", session_id=s.id, user_message="3")
-            )
+            await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="1")
+            await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="2")
+            await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="3")
 
         with pytest.raises(TurnLimitReached):
             asyncio.run(scenario())
 
     def test_another_founders_session_is_invisible(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["x"])
-        svc = _service(core, streamer)
+        svc = _service(FakeCore())
 
         async def scenario() -> None:
             s = await svc.start_session(owner_sub="alice", seed_idea="idea")
-            await _collect(
-                svc.chat_turn(owner_sub="mallory", session_id=s.id, user_message="hi")
-            )
+            await svc.chat_turn(owner_sub="mallory", session_id=s.id, user_message="hi")
 
         with pytest.raises(SessionNotFound):
             asyncio.run(scenario())
@@ -282,37 +261,36 @@ class TestFinaliseAndReport:
         async def scenario() -> str:
             s = await svc.start_session(owner_sub="u", seed_idea="idea")
             for i in range(turns):
-                await _collect(
-                    svc.chat_turn(owner_sub="u", session_id=s.id, user_message=str(i))
-                )
+                await svc.chat_turn(owner_sub="u", session_id=s.id, user_message=str(i))
             return s.id
 
         return asyncio.run(scenario())
 
     def test_finalise_requests_analysis_and_moves_to_analysing(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["x"])
-        svc = _service(core, streamer, min_turns=2, max_turns=5)
+        core = FakeCore()
+        svc = _service(core, min_turns=2, max_turns=5)
         sid = self._gathered(core, svc, turns=3)
 
         run_id = asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
         assert run_id == "run-analysis-1"
         assert core.sessions[sid].status == ANALYSING
         assert core.sessions[sid].analysis_run_id == run_id
-        # the analysis was handed the idea + the conversation
-        convo = core.analysis_requests[0]["conversation"]
-        assert "idea" in convo[0]["content"]
-        assert len(convo) > 1
+        # Core was handed the analyst definition + the structured-output tool schema
+        req = core.analysis_requests[0]
+        assert req["thread_id"] == core.sessions[sid].thread_id
+        assert req["output_tool"]["function"]["name"] == REPORT_TOOL_NAME
+        assert "web_search" in req["definition"]["tools"]
 
     def test_finalise_needs_enough_turns(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["x"])
-        svc = _service(core, streamer, min_turns=3)
+        core = FakeCore()
+        svc = _service(core, min_turns=3)
         sid = self._gathered(core, svc, turns=1)
         with pytest.raises(NotEnoughTurns):
             asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
 
     def test_cannot_finalise_twice(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["x"])
-        svc = _service(core, streamer, min_turns=1)
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
         sid = self._gathered(core, svc, turns=1)
 
         async def scenario() -> None:
@@ -322,9 +300,21 @@ class TestFinaliseAndReport:
         with pytest.raises(NotGathering):
             asyncio.run(scenario())
 
+    def test_cannot_chat_after_finalising(self) -> None:
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
+        sid = self._gathered(core, svc, turns=1)
+
+        async def scenario() -> None:
+            await svc.finalise(owner_sub="u", session_id=sid)
+            await svc.chat_turn(owner_sub="u", session_id=sid, user_message="more")
+
+        with pytest.raises(NotGathering):
+            asyncio.run(scenario())
+
     def test_complete_stores_the_report_and_marks_complete(self) -> None:
-        core, streamer = FakeCore(), FakeStreamer(["x"])
-        svc = _service(core, streamer, min_turns=1)
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
         sid = self._gathered(core, svc, turns=1)
 
         async def scenario() -> dict[str, Any] | None:

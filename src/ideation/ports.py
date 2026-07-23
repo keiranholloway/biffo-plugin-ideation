@@ -1,36 +1,35 @@
-"""The boundaries the orchestration depends on (hexagonal ports).
+"""The boundary the orchestration depends on (a hexagonal port).
 
-Real adapters implement these against Core's API (ADR-0002 — never the DB) and
-the runtime's streaming client (ADR-0016); the tests implement fakes. Keeping the
-logic behind these interfaces is what lets the orchestration be built and tested
-now, with only the thin Function-URL / run_as:user adapter deferred until the
-spine lands.
+The real adapter binds this to Core's buffered chat spine (ADR-0016, *buffered*
+amendment) and Core's API (ADR-0002 — never the DB). The tests bind it to a fake.
+Keeping the logic behind this interface is what lets the orchestration be built
+and tested now; the deferred piece is Core generalising #497's prompt-assistant
+spine into a reusable, founder-gated capability a plugin can drive, plus the thin
+adapter that calls it.
+
+There is deliberately no ``Streamer`` port any more. Under the buffered amendment
+the runtime does not stream: Core assembles the turn, synchronously invokes the
+runtime, and returns the whole reply. So a chat turn is one call
+(:meth:`run_chat_turn`), not a stream — and the security-critical assembly
+(fencing the founder's untrusted message, bounding history, the trusted system
+prompt) stays inside Core's trusted layer, never in this plugin.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
-from .models import Session, StreamChunk
-
-
-class Streamer(Protocol):
-    """The LLM streaming boundary — implemented by the runtime's
-    ``OpenRouterClient.stream`` (ADR-0016 §4)."""
-
-    def stream(
-        self, *, model: str, messages: list[dict[str, Any]]
-    ) -> AsyncIterator[StreamChunk]: ...
+from .models import Session, TurnResult
 
 
 class CoreGateway(Protocol):
-    """Everything the orchestration needs from Core, all via the API (ADR-0002).
+    """Everything the orchestration needs from Core, all via the API/spine
+    (ADR-0002 — the plugin never touches the database).
 
     Session/report rows live in the ``ideation_*`` tables the module declared;
     the chat transcript lives as a thread of agent runs (ADR-0016 §2). The real
-    adapter reaches these through Core's internal API under the founder's
-    authority; ownership is enforced by passing ``owner_sub`` on every read.
+    adapter reaches these under the founder's authority; ownership is enforced by
+    passing ``owner_sub`` on every read.
     """
 
     async def create_session(
@@ -47,21 +46,25 @@ class CoreGateway(Protocol):
         self, *, session_id: str, status: str, analysis_run_id: str | None = None
     ) -> None: ...
 
-    async def thread_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
-        """The ordered user/assistant history of the session's run thread."""
-        ...
-
-    async def record_turn(
+    async def run_chat_turn(
         self,
         *,
         thread_id: str,
         owner_sub: str,
-        definition: dict[str, Any],
-        user_message: str,
-        assistant_message: str,
-        usage: object | None,
-    ) -> None:
-        """Persist one completed turn as a run in the thread (ADR-0016 §2)."""
+        agent_name: str,
+        system_prompt: str,
+        user_text: str,
+        model: str,
+    ) -> TurnResult:
+        """Run one buffered challenger turn through the spine and return the reply.
+
+        Core does the trusted work: it fences ``user_text`` as untrusted data,
+        prepends the trusted ``system_prompt``, replays the thread's bounded
+        history, synchronously invokes the runtime, and persists the exchange as a
+        run in the thread (ADR-0016 §2, §7). The plugin passes its domain prompt
+        and the founder's *raw* message — it must never fence or assemble itself,
+        so the security guarantee lives in one trusted place.
+        """
         ...
 
     async def request_analysis(
@@ -69,10 +72,14 @@ class CoreGateway(Protocol):
         *,
         thread_id: str,
         owner_sub: str,
+        agent_name: str,
         definition: dict[str, Any],
-        conversation: list[dict[str, Any]],
+        output_tool: dict[str, Any],
     ) -> str:
-        """Kick the async analysis run; returns its run id."""
+        """Kick the async analysis run over the thread; returns its run id. Core
+        assembles the analyst's context from the thread (which already holds the
+        seed idea as its first turn) and registers the plugin-provided
+        ``output_tool`` schema for the run's structured result."""
         ...
 
     async def save_report(
