@@ -26,22 +26,16 @@ class Session:
 
 
 @dataclass(frozen=True)
-class Usage:
-    """The completed-turn accounting a streamed LLM call reports on its final
-    chunk — mirrors the runtime's ``LLMResponse`` (ADR-0016 §4)."""
+class TurnResult:
+    """One buffered challenger turn's reply. The spine (ADR-0016, *buffered*
+    amendment) returns the whole assistant message at once — Core assembles the
+    context, synchronously invokes the runtime, and hands back the finished reply
+    plus its accounting. Mirrors the spine's ``ChatTurnResult`` so the adapter
+    passes it straight through."""
 
-    content: str
-    model: str
+    reply: str
+    model: str | None = None
+    finish_reason: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost_usd: float | None = None
-
-
-@dataclass(frozen=True)
-class StreamChunk:
-    """One event from a streamed turn: a text ``delta`` as it arrives, or — on the
-    final chunk — the completed ``Usage``. Structurally matches the runtime's
-    ``StreamChunk`` so the adapter passes them straight through."""
-
-    delta: str = ""
-    done: Usage | None = None

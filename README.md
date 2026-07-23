@@ -8,10 +8,12 @@ economic moat, market fit).
 
 It is an [ADR-0003](https://github.com/keiranholloway/biffo-template/blob/main/docs/ADR/0003-plugin-system-and-marketplace.md)
 plugin built on the [ADR-0016](https://github.com/keiranholloway/biffo-template/blob/main/docs/ADR/0016-the-prompt-assistant.md)
-**synchronous run/thread spine**: the chat is a streamed *thread of agent runs*
-through the runtime's Cognito-authed Function URL; the analysis is a single async
-agent run. **Data always lives in Core** (ADR-0002) — this module declares tables;
-Core owns and serves them.
+**synchronous chat spine** (the *buffered* amendment): the chat is a *thread of
+agent runs* where **Core is the ingress** — it authenticates the founder, fences
+their message as untrusted data, assembles the turn, synchronously invokes the
+runtime, and returns the whole reply (no streaming; the Lambda/Python runtime
+buffers). The analysis is a single async agent run. **Data always lives in Core**
+(ADR-0002) — this module declares tables; Core owns and serves them.
 
 ## Data model (`biffo.plugin.json`)
 
@@ -25,7 +27,7 @@ Two Core-owned tables (declared here, deployed by Core; `id`/`tenant_id`/
 - **`ideation_reports`** — `session_id`, `prd` (JSON), `scorecard` (JSON), `model`.
 
 All CRUD permissions are **closed**: access is owner-scoped through the module's
-Lambda on the Function-URL spine, never the tenant-scoped generic-CRUD layer.
+orchestration on Core's chat spine, never the tenant-scoped generic-CRUD layer.
 
 ## Agent definitions (`src/ideation/definitions.py`)
 
@@ -38,11 +40,17 @@ Lambda on the Function-URL spine, never the tenant-scoped generic-CRUD layer.
 
 ## Build phasing
 
-- ✅ **Data model + agent definitions** (this repo, pydantic-only, tested).
-- ⬜ **Lambda orchestration** — session lifecycle + per-turn streamed chat +
-  `finalise` (the async analysis run) + `report`, on the ADR-0016 Function-URL
-  spine. Adds `biffo-plugin-sdk` / `aws-lambda-powertools` / `httpx`. **Gated on
-  the spine's Function-URL + `run_as: user` pieces landing in biffo-template.**
+- ✅ **Data model + agent definitions** (pydantic-only, tested).
+- ✅ **Orchestration logic** (`src/ideation/{models,ports,service}.py`) — session
+  lifecycle, the buffered `chat_turn`, `finalise` (the async analysis run),
+  `complete_analysis` → stored report, owner-scoped `get_report`. Transport-agnostic
+  behind one `CoreGateway` port; fenced/assembled by Core's trusted spine, never
+  here. Fully unit-tested against an in-memory fake Core.
+- ⬜ **Core capability + adapter** — Core generalises #497's prompt-assistant spine
+  into a reusable, founder-gated buffered chat capability a plugin can drive (its
+  own system prompt + `agent_name` + group gate), plus the async analyst run
+  accepting a plugin-provided structured-output tool schema. Then a thin adapter
+  binds `CoreGateway` to it. **Gated on that capability landing in biffo-template.**
 - ⬜ **`/ideation` frontend** — the founder-gated chat + live scorecard/PRD.
 
 ## Development
