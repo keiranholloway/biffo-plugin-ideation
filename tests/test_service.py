@@ -13,8 +13,9 @@ from ideation.definitions import (
     CHALLENGER_INSTRUCTIONS,
     REPORT_TOOL_NAME,
 )
-from ideation.models import ANALYSING, COMPLETE, GATHERING, Session, TurnResult
+from ideation.models import ANALYSING, COMPLETE, GATHERING, Run, Session, TurnResult
 from ideation.service import (
+    AnalysisFailed,
     IdeationService,
     MalformedReport,
     NotEnoughTurns,
@@ -36,8 +37,22 @@ class FakeCore:
         self.reports: dict[str, dict[str, Any]] = {}
         self.turn_calls: list[dict[str, Any]] = []
         self.analysis_requests: list[dict[str, Any]] = []
+        self.runs: dict[str, Run] = {}
         self._replies = replies or ["Why now?"]
         self._seq = 0
+
+    # test helper: drive the async analysis run to a terminal state
+    def resolve_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        messages: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+    ) -> None:
+        self.runs[run_id] = Run(
+            id=run_id, status=status, messages=messages or [], model=model
+        )
 
     async def create_session(
         self, *, owner_sub: str, seed_idea: str, thread_id: str
@@ -123,7 +138,13 @@ class FakeCore:
                 "output_tool": output_tool,
             }
         )
-        return "run-analysis-1"
+        run_id = "run-analysis-1"
+        # the run starts in flight; a test drives it terminal via resolve_run
+        self.runs[run_id] = Run(id=run_id, status="running", messages=[])
+        return run_id
+
+    async def get_run(self, *, run_id: str) -> Run | None:
+        return self.runs.get(run_id)
 
     async def save_report(
         self,
@@ -312,20 +333,24 @@ class TestFinaliseAndReport:
         with pytest.raises(NotGathering):
             asyncio.run(scenario())
 
-    def test_complete_stores_the_report_and_marks_complete(self) -> None:
+    def test_get_report_materialises_the_completed_run_lazily(self) -> None:
         core = FakeCore()
         svc = _service(core, min_turns=1)
         sid = self._gathered(core, svc, turns=1)
 
         async def scenario() -> dict[str, Any] | None:
-            await svc.finalise(owner_sub="u", session_id=sid)
-            # still analysing → no report yet
+            run_id = await svc.finalise(owner_sub="u", session_id=sid)
+            # while the run is still in flight, polling yields no report yet...
             assert await svc.get_report(owner_sub="u", session_id=sid) is None
-            await svc.complete_analysis(
-                session_id=sid,
-                run_messages=_analysis_run(_report_payload("Coaches!")),
+            assert core.sessions[sid].status == ANALYSING
+            # ...the analyst run completes with its structured tool call...
+            core.resolve_run(
+                run_id,
+                status="completed",
+                messages=_analysis_run(_report_payload("Coaches!")),
                 model="m",
             )
+            # ...and the next poll materialises + stores it under this founder.
             return await svc.get_report(owner_sub="u", session_id=sid)
 
         report = asyncio.run(scenario())
@@ -334,6 +359,60 @@ class TestFinaliseAndReport:
         assert report["prd"]["problem"] == "Coaches!"
         assert report["scorecard"]["viability"]["score"] == 3
         assert report["model"] == "m"
+
+    def test_report_is_only_materialised_once(self) -> None:
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
+        sid = self._gathered(core, svc, turns=1)
+
+        async def scenario() -> None:
+            run_id = await svc.finalise(owner_sub="u", session_id=sid)
+            core.resolve_run(
+                run_id,
+                status="completed",
+                messages=_analysis_run(_report_payload()),
+                model="m",
+            )
+            await svc.get_report(
+                owner_sub="u", session_id=sid
+            )  # materialises → COMPLETE
+            # A second poll on a COMPLETE session reads the stored report, it does not
+            # re-extract from the run (which a test could no longer even resolve).
+            core.runs.clear()
+            again = await svc.get_report(owner_sub="u", session_id=sid)
+            assert again is not None
+
+        asyncio.run(scenario())
+
+    def test_a_failed_analysis_run_surfaces(self) -> None:
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
+        sid = self._gathered(core, svc, turns=1)
+
+        async def scenario() -> None:
+            run_id = await svc.finalise(owner_sub="u", session_id=sid)
+            core.resolve_run(run_id, status="failed")
+            await svc.get_report(owner_sub="u", session_id=sid)
+
+        with pytest.raises(AnalysisFailed):
+            asyncio.run(scenario())
+
+    def test_a_completed_run_without_a_report_is_malformed(self) -> None:
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
+        sid = self._gathered(core, svc, turns=1)
+
+        async def scenario() -> None:
+            run_id = await svc.finalise(owner_sub="u", session_id=sid)
+            core.resolve_run(
+                run_id,
+                status="completed",
+                messages=[{"role": "assistant", "content": "no tool call"}],
+            )
+            await svc.get_report(owner_sub="u", session_id=sid)
+
+        with pytest.raises(MalformedReport):
+            asyncio.run(scenario())
 
 
 class TestExtractReport:

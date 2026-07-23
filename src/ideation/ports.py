@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from .models import Session, TurnResult
+from .models import Run, Session, TurnResult
 
 
 class CoreGateway(Protocol):
@@ -80,6 +80,13 @@ class CoreGateway(Protocol):
         assembles the analyst's context from the thread (which already holds the
         seed idea as its first turn) and registers the plugin-provided
         ``output_tool`` schema for the run's structured result."""
+        ...
+
+    async def get_run(self, *, run_id: str) -> Run | None:
+        """Read the async analysis run (Core's AgentRun). Used when a founder polls
+        for their report: a terminal run is materialised into the stored report
+        under the founder's own request (the chosen §5 trust model has no
+        event-subscriber write path)."""
         ...
 
     async def save_report(
