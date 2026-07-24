@@ -1,14 +1,17 @@
-"""The Ideation Engine's founder-facing Lambda (ADR-0018 §1).
+"""The Ideation Engine's founder-facing ASGI app (ADR-0021).
 
-A FastAPI + Mangum app, reached by a logged-in founder at ``<base>/ideation/api/*``
-on the shared CloudFront. It authenticates every request itself — the SDK's
-``require_group("founder")`` verifies the shared-Cognito JWT and requires the
-``founder`` group — then drives :class:`~ideation.service.IdeationService` over the
-HTTP ``CoreGateway``, forwarding the founder's token so Core owns identity and
-owner-scoping (ADR-0017 §3/§5). It holds **no data** (ADR-0002).
+A FastAPI app mounted by the shared plugin host at ``/api/v1/plugins/ideation/*``.
+The host authenticates the founder (its group gate verifies the shared-Cognito JWT
+and requires the ``founder`` group) before dispatching here; this app *also* runs
+``require_group("founder")`` per route — defence-in-depth, and the way it obtains
+the founder's token to forward to Core over the HTTP ``CoreGateway`` so Core owns
+identity and owner-scoping (ADR-0017 §3/§5). It holds **no data** (ADR-0002).
 
-``handler`` (bottom) is the Lambda entrypoint the manifest's ``user_ingress``
-declares (``ideation.app.handler``).
+``app`` (the module-level FastAPI object) is what the manifest's ``user_ingress``
+declares as ``ideation.app:app``; the host provides the Lambda entrypoint and
+strips the ``/api/v1/plugins/ideation`` mount prefix, so the routes below stay
+clean and the app is agnostic to where it is mounted. It no longer ships its own
+Mangum handler.
 """
 
 from __future__ import annotations
@@ -19,7 +22,6 @@ from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
-from mangum import Mangum
 from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpGateway
@@ -160,10 +162,3 @@ async def read_report(
     report = await svc.get_report(owner_sub=founder.sub, session_id=session_id)
     state = await svc.get_session(owner_sub=founder.sub, session_id=session_id)
     return {"status": state.status, "report": report}
-
-
-# CloudFront routes <base>/ideation/api/* to the API Gateway ingress without
-# stripping the prefix, so the Lambda receives paths like "/ideation/api/sessions".
-# api_gateway_base_path strips that mount prefix before ASGI, so the routes above
-# stay clean ("/sessions", …) and the app is agnostic to where it is mounted.
-handler = Mangum(app, api_gateway_base_path="/ideation/api")

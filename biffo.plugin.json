@@ -4,7 +4,7 @@
   "description": "Ideation Engine — an agentic chatbot that pressure-tests a founder's idea over a short guided conversation (3–5 turns), then produces a high-level PRD and a viability scorecard (competitive landscape, build-vs-buy, complexity, economic moat, market fit). A user-facing product module for approved founders, built on ADR-0016's synchronous run/thread spine.",
   "author": "Biffo Team",
   "tags": ["ideation", "agentic", "product", "prd"],
-  "required_core_version": ">=0.70.0",
+  "required_core_version": ">=0.105.0",
   "core_capabilities": {
     "chat-turn": "^1",
     "agent-run-request": "^1",
@@ -15,9 +15,8 @@
     "chat-agent-registry": "^1"
   },
   "user_ingress": {
-    "path": "api",
     "required_group": "founder",
-    "handler": "ideation.app.handler"
+    "app": "ideation.app:app"
   },
   "user_frontend": {
     "dir": "web/dist",

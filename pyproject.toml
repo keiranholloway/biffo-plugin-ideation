@@ -5,12 +5,11 @@ description = "Ideation Engine — an agentic module that pressure-tests a found
 requires-python = ">=3.13"
 dependencies = [
   "pydantic>=2.10.4",
-  # The founder-gated Lambda (ADR-0018): the SDK's require_group gate (user-serving)
-  # + SigV4 signing for the Core seams (sigv4 -> botocore). biffo-plugin-sdk 1.1.0
-  # is on PyPI, so this resolves normally.
+  # The founder-gated ASGI app (ADR-0021), mounted by the shared plugin host: the
+  # SDK's require_group gate (user-serving) + SigV4 signing for the Core seams
+  # (sigv4 -> botocore). No mangum — the host provides the Lambda entrypoint.
   "biffo-plugin-sdk[user-serving,sigv4]>=1.1,<2.0",
   "fastapi>=0.115.0",
-  "mangum>=0.19.0",
   "httpx>=0.28.1",
   "aws-lambda-powertools>=3.4.0",
 ]

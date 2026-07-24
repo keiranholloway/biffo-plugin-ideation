@@ -1,10 +1,10 @@
-// Calls THIS module's own Lambda ingress only (never Core directly — ADR-0002).
-// Same-origin, path-routed at <base>/ideation/api/* on the shared CloudFront; the
-// founder's Cognito id token is sent in the X-Biffo-Founder-Token header (behind
-// CloudFront OAC, Authorization carries the SigV4 origin signature — ADR-0018),
-// which the Lambda verifies (require_group("founder")) before doing anything.
+// Calls this module's API only (never Core directly — ADR-0002), served by the
+// shared plugin host at <base>/api/v1/plugins/ideation/* on the API Gateway
+// (ADR-0021). The founder's Cognito id token is sent in the X-Biffo-Founder-Token
+// header; the host's group gate verifies it (founder group) and the app re-checks
+// it (require_group("founder")) before doing anything.
 
-const API_BASE = '/ideation/api'
+const API_BASE = '/api/v1/plugins/ideation'
 
 export class ApiError extends Error {
   constructor(
@@ -79,10 +79,12 @@ export function createApi(getIdToken: () => string | null) {
       method,
       headers: {
         'Content-Type': 'application/json',
-        // The founder id token rides X-Biffo-Founder-Token, NOT Authorization:
-        // behind CloudFront OAC (ADR-0018) the Authorization header is consumed by
-        // the SigV4 origin signature, so the app reads the JWT from this header.
-        ...(token != null ? { 'X-Biffo-Founder-Token': token } : {}),
+        // The founder id token rides Authorization: Bearer (ADR-0021), exactly as
+        // the portal calls Core. The API Gateway's Cognito authorizer validates it
+        // (audience = the app client id, i.e. the id token), the shared plugin
+        // host's group gate reads it to enforce the founder group, and this app's
+        // require_group("founder") re-verifies it and forwards it to Core.
+        ...(token != null ? { Authorization: `Bearer ${token}` } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })

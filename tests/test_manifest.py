@@ -90,13 +90,15 @@ def test_every_table_is_owner_scoped_on_a_real_column() -> None:
         )
 
 
-def test_declares_a_founder_gated_user_ingress_pointing_at_the_lambda() -> None:
-    # ADR-0018 §1: the authenticated Lambda ingress. The handler must be the app
-    # module's Mangum handler, gated to the founder group.
+def test_declares_a_founder_gated_user_ingress_pointing_at_the_asgi_app() -> None:
+    # ADR-0021: the shared plugin host mounts this app. user_ingress references the
+    # ASGI app as "<module>:<attr>", gated to the founder group. No handler/path —
+    # the host owns the Lambda entrypoint and the mount prefix.
     ingress = _manifest()["user_ingress"]
     assert ingress["required_group"] == "founder"
-    assert ingress["handler"] == "ideation.app.handler"
-    assert "/" not in ingress["path"]  # a single path segment
+    assert ingress["app"] == "ideation.app:app"
+    assert "handler" not in ingress
+    assert "path" not in ingress
 
 
 def test_declares_a_founder_gated_user_frontend() -> None:

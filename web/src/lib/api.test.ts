@@ -14,7 +14,7 @@ function mockFetch(status: number, body: unknown) {
 describe('createApi', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('starts a session at /ideation/api/sessions with the founder-token header', async () => {
+  it('starts a session at /api/v1/plugins/ideation/sessions with the Bearer token', async () => {
     const f = mockFetch(201, {
       session_id: 's1',
       reply: 'why now?',
@@ -30,13 +30,13 @@ describe('createApi', () => {
 
     expect(r.session_id).toBe('s1')
     const [url, opts] = f.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('/ideation/api/sessions')
+    expect(url).toBe('/api/v1/plugins/ideation/sessions')
     expect(opts.method).toBe('POST')
-    // The founder JWT rides X-Biffo-Founder-Token (not Authorization — CloudFront
-    // OAC claims Authorization for the SigV4 origin signature, ADR-0018).
+    // The founder JWT rides Authorization: Bearer (ADR-0021), as the portal calls
+    // Core — the gateway's Cognito authorizer validates it and the host gates on it.
     const headers = opts.headers as Record<string, string>
-    expect(headers['X-Biffo-Founder-Token']).toBe('tok-123')
-    expect(headers['Authorization']).toBeUndefined()
+    expect(headers['Authorization']).toBe('Bearer tok-123')
+    expect(headers['X-Biffo-Founder-Token']).toBeUndefined()
     expect(JSON.parse(opts.body as string)).toEqual({ seed_idea: 'an idea' })
   })
 
@@ -45,10 +45,10 @@ describe('createApi', () => {
     const api = createApi(() => 't')
 
     await api.getReport('s1')
-    expect((f.mock.calls[0] as [string])[0]).toBe('/ideation/api/sessions/s1/report')
+    expect((f.mock.calls[0] as [string])[0]).toBe('/api/v1/plugins/ideation/sessions/s1/report')
 
     await api.finalise('s1')
-    expect((f.mock.calls[1] as [string])[0]).toBe('/ideation/api/sessions/s1/finalise')
+    expect((f.mock.calls[1] as [string])[0]).toBe('/api/v1/plugins/ideation/sessions/s1/finalise')
   })
 
   it('maps a non-2xx response to ApiError with the status', async () => {

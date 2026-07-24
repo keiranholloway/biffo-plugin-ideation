@@ -1,4 +1,4 @@
-"""The founder-facing Lambda app (ADR-0018): endpoints + error mapping.
+"""The founder-facing ASGI app (ADR-0021): endpoints + error mapping.
 
 The gate (``require_founder``) and the service factory are overridden so the app is
 exercised over an in-memory fake Core — the JWT verification and the SigV4 transport
@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from biffo_plugin_sdk import ForwardedUser
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ideation.app import app, get_service, require_founder
@@ -194,9 +195,12 @@ def test_the_app_is_gated_without_a_token(core):
     assert resp.status_code == 401
 
 
-def test_handler_strips_the_ingress_mount_prefix() -> None:
-    # CloudFront forwards <base>/ideation/api/* unstripped; Mangum removes that
-    # prefix so the routes above stay mounted at "/…" not "/ideation/api/…".
-    from ideation.app import handler
+def test_exposes_an_asgi_app_not_a_lambda_handler() -> None:
+    # Under ADR-0021 the shared plugin host provides the Lambda entrypoint and
+    # mounts this app at /api/v1/plugins/ideation, stripping that prefix — so the
+    # module exposes the FastAPI `app` (what user_ingress.app references) and no
+    # longer ships its own Mangum handler.
+    import ideation.app as app_module
 
-    assert handler.config["api_gateway_base_path"] == "/ideation/api"
+    assert isinstance(app_module.app, FastAPI)
+    assert not hasattr(app_module, "handler")
