@@ -192,3 +192,11 @@ def test_the_app_is_gated_without_a_token(core):
     monkeypatched = TestClient(app, raise_server_exceptions=False)
     resp = monkeypatched.post("/sessions", json={"seed_idea": "x"})
     assert resp.status_code == 401
+
+
+def test_handler_strips_the_ingress_mount_prefix() -> None:
+    # CloudFront forwards <base>/ideation/api/* unstripped; Mangum removes that
+    # prefix so the routes above stay mounted at "/…" not "/ideation/api/…".
+    from ideation.app import handler
+
+    assert handler.config["api_gateway_base_path"] == "/ideation/api"

@@ -162,4 +162,8 @@ async def read_report(
     return {"status": state.status, "report": report}
 
 
-handler = Mangum(app)
+# CloudFront routes <base>/ideation/api/* to the API Gateway ingress without
+# stripping the prefix, so the Lambda receives paths like "/ideation/api/sessions".
+# api_gateway_base_path strips that mount prefix before ASGI, so the routes above
+# stay clean ("/sessions", …) and the app is agnostic to where it is mounted.
+handler = Mangum(app, api_gateway_base_path="/ideation/api")
