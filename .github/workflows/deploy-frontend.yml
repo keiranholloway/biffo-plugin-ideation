@@ -1,0 +1,147 @@
+# Deploy the Ideation frontend to its S3 origin behind the shared CloudFront
+# (ADR-0018 §2). This is the frontend half of the two-apply install: after the
+# plugin's Terraform has applied (apply 1) and its CDN origins are registered
+# (`biffo plugin wire`, apply 2), the built SPA is synced to the bucket the apply
+# created and the `<prefix>/*` path is invalidated.
+#
+# The bucket, distribution id and region come from the *instance's* Terraform
+# outputs — this plugin repo is just source and has no AWS account of its own.
+# So the workflow is parameterised and declares the OIDC role it must assume;
+# whoever deploys (the instance's pipeline via `workflow_call`, or a maintainer
+# via `workflow_dispatch`) supplies the values from `terraform output`:
+#
+#   frontend_bucket_name           -> bucket-name
+#   (cdn) cloudfront_distribution_id -> distribution-id
+#
+# It never runs Terraform and never applies anything — it only builds and uploads
+# static assets, so it is safe to run independently of the infra pipeline.
+name: Deploy Frontend
+
+on:
+  workflow_call:
+    inputs:
+      bucket-name:
+        description: The frontend S3 bucket (Terraform output frontend_bucket_name).
+        required: true
+        type: string
+      distribution-id:
+        description: Shared CloudFront distribution id to invalidate. Omit to skip invalidation.
+        required: false
+        type: string
+        default: ''
+      aws-region:
+        description: AWS region of the bucket.
+        required: false
+        type: string
+        default: us-east-1
+      path-prefix:
+        description: The plugin's URL path segment; assets are uploaded under this key prefix (no prefix stripping at the origin).
+        required: false
+        type: string
+        default: ideation
+    secrets:
+      role_arn:
+        description: OIDC role to assume for the sync/invalidation (write to the bucket + CloudFront).
+        required: true
+  workflow_dispatch:
+    inputs:
+      bucket-name:
+        description: The frontend S3 bucket (Terraform output frontend_bucket_name).
+        required: true
+        type: string
+      distribution-id:
+        description: Shared CloudFront distribution id to invalidate. Omit to skip invalidation.
+        required: false
+        type: string
+        default: ''
+      aws-region:
+        description: AWS region of the bucket.
+        required: false
+        type: string
+        default: us-east-1
+      path-prefix:
+        description: The plugin's URL path segment.
+        required: false
+        type: string
+        default: ideation
+
+permissions:
+  contents: read
+  id-token: write # mint the OIDC token exchanged for the deploy role
+
+jobs:
+  deploy-frontend:
+    name: Build & sync the Ideation SPA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build the SPA
+        working-directory: web
+        # vite.config.ts pins base: '/ideation/', so the built asset URLs already
+        # carry the path prefix — the bucket keys must match (see the sync below).
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+          test -f dist/index.html # fail loudly rather than sync an empty build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # In workflow_call the caller passes `role_arn`; on a manual dispatch it
+          # falls back to a repo secret the maintainer sets for their instance.
+          role-to-assume: ${{ secrets.role_arn || secrets.PLUGIN_OIDC_ROLE_ARN }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Sync to S3
+        env:
+          BUCKET: ${{ inputs.bucket-name }}
+          PATH_PREFIX: ${{ inputs.path-prefix }}
+        run: |
+          # The core project's CloudFront routes <prefix>/* straight through to
+          # this bucket with NO prefix stripping (see modules/cloud/aws/cdn), so
+          # the assets live under a key prefix matching the path segment. index.html
+          # references /<prefix>/assets/* (vite base), which resolves to the same
+          # keys. ${VAR:+...} expands to "<prefix>/" only when set.
+          DEST="s3://${BUCKET}/${PATH_PREFIX:+${PATH_PREFIX}/}"
+          # Hashed assets under assets/ are immutable and keep the long cache;
+          # index.html changes every deploy and must not be cached.
+          aws s3 sync web/dist/ "$DEST" \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html"
+          aws s3 sync web/dist/ "$DEST" \
+            --delete \
+            --cache-control "no-cache" \
+            --exclude "*" \
+            --include "index.html"
+
+      - name: Invalidate CloudFront
+        if: inputs.distribution-id != ''
+        # Never let a cache invalidation fail the deploy — the assets are already
+        # uploaded, and a missed invalidation self-heals via CloudFront TTLs.
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          DISTRIBUTION_ID: ${{ inputs.distribution-id }}
+          PATH_PREFIX: ${{ inputs.path-prefix }}
+        run: |
+          for attempt in 1 2 3; do
+            if aws cloudfront create-invalidation \
+              --distribution-id "$DISTRIBUTION_ID" \
+              --paths "/${PATH_PREFIX:+${PATH_PREFIX}/}*" \
+              --cli-read-timeout 20 --cli-connect-timeout 10; then
+              exit 0
+            fi
+            echo "Invalidation attempt $attempt failed; retrying..."
+            sleep 5
+          done
+          echo "::warning::CloudFront invalidation did not succeed after 3 attempts; it will self-heal via TTL."
