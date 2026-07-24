@@ -5,8 +5,8 @@
 # the deploy target the built web/dist is synced to.
 
 output "function_url_domain" {
-  description = "The Lambda Function URL host (no scheme, no trailing slash) — the plugin_api_origins origin."
-  value       = trimsuffix(trimprefix(aws_lambda_function_url.ingress.function_url, "https://"), "/")
+  description = "The api ingress origin host (no scheme, no trailing slash) — the plugin_api_origins origin. Now the API Gateway execute-api domain (the ingress moved off a Lambda Function URL — see main.tf)."
+  value       = trimsuffix(trimprefix(aws_apigatewayv2_api.ingress.api_endpoint, "https://"), "/")
 }
 
 output "frontend_bucket_regional_domain" {

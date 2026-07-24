@@ -67,28 +67,54 @@ module "function" {
   tags                  = var.tags
 }
 
-# The authenticated ingress (ADR-0018 §1). auth NONE: the Function URL is reached
-# by the shared CloudFront and the Lambda authenticates every request itself
-# (require_group verifies the shared-Cognito JWT). CORS is unnecessary — the
-# frontend and the api are same-origin under the shared distribution.
-resource "aws_lambda_function_url" "ingress" {
-  function_name = module.function.function_name
-  # AWS_IAM, NOT public: a governed account blocks public (NONE) Function URLs.
-  # CloudFront invokes it via Origin Access Control (SigV4) — see the permission
-  # below — so it is reachable only through the shared distribution, and the
-  # Lambda's own founder-JWT gate authorizes the caller.
-  authorization_type = "AWS_IAM"
+# The authenticated ingress (ADR-0018 §1): an HTTP API Gateway in front of the
+# Lambda, reached by the shared CloudFront as an ordinary custom origin.
+#
+# Why API Gateway and not a Lambda Function URL: the account guardrail blocks
+# public (NONE-auth) Function URLs, and an OAC-signed (IAM) Function URL cannot
+# serve browser requests with a body — CloudFront OAC requires the CLIENT to
+# compute the SHA256 of the body and SigV4-sign it (AWS docs: "Lambda doesn't
+# support unsigned payloads"), which a browser fetch() cannot do. This API is
+# POST-heavy, so a Function URL is a dead end. API Gateway is a public HTTPS
+# endpoint (the guardrail allows it — the Core API uses it) and the Lambda
+# authenticates every request itself (require_group verifies the shared-Cognito
+# founder JWT), so the routes need no API-Gateway authorizer.
+resource "aws_apigatewayv2_api" "ingress" {
+  name          = "${var.project_name}-${var.environment}-ideation"
+  protocol_type = "HTTP"
+  description   = "Ideation plugin authenticated ingress (ADR-0018)"
+  tags          = var.tags
 }
 
-# Only CloudFront (this project's distribution, via OAC) may invoke the Function
-# URL. Scoped to the distribution ARN so no other distribution or principal can.
-resource "aws_lambda_permission" "function_url_cloudfront" {
-  statement_id           = "AllowCloudFrontOACInvoke"
-  action                 = "lambda:InvokeFunctionUrl"
-  function_name          = module.function.function_name
-  principal              = "cloudfront.amazonaws.com"
-  source_arn             = var.cdn_distribution_arn
-  function_url_auth_type = "AWS_IAM"
+resource "aws_apigatewayv2_integration" "ingress" {
+  api_id                 = aws_apigatewayv2_api.ingress.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = module.function.function_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 29000
+}
+
+# $default route: the founder-JWT gate in the Lambda is the only authorization.
+resource "aws_apigatewayv2_route" "ingress" {
+  api_id             = aws_apigatewayv2_api.ingress.id
+  route_key          = "$default"
+  target             = "integrations/${aws_apigatewayv2_integration.ingress.id}"
+  authorization_type = "NONE"
+}
+
+resource "aws_apigatewayv2_stage" "ingress" {
+  api_id      = aws_apigatewayv2_api.ingress.id
+  name        = "$default"
+  auto_deploy = true
+  tags        = var.tags
+}
+
+resource "aws_lambda_permission" "ingress" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.function.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.ingress.execution_arn}/*/*"
 }
 
 # Core API access (ADR-0009): SigV4-signed calls to /api/v1/internal/* only. The
