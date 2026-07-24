@@ -224,21 +224,30 @@ def test_save_report_posts_without_owner():
         gw.save_report(session_id="sess-1", prd={"p": 1}, scorecard={"s": 2}, model="m")
     )
     body = t.call("POST", _REPORTS)["json"]
+    # prd/scorecard are JSON-serialised for the Text columns (Core has no JSON type)
     assert body == {
         "session_id": "sess-1",
-        "prd": {"p": 1},
-        "scorecard": {"s": 2},
+        "prd": '{"p": 1}',
+        "scorecard": '{"s": 2}',
         "model": "m",
     }
     assert "owner_sub" not in body
 
 
-def test_get_report_filters_by_session_and_takes_the_first():
+def test_get_report_parses_the_json_text_columns():
     t = FakeTransport()
+    # Core returns the Text columns verbatim — JSON strings, as they were stored.
     t.on(
         "GET",
         _REPORTS,
-        [{"prd": {"p": 1}, "scorecard": {"s": 2}, "model": "m", "owner_sub": "alice"}],
+        [
+            {
+                "prd": '{"p": 1}',
+                "scorecard": '{"s": 2}',
+                "model": "m",
+                "owner_sub": "alice",
+            }
+        ],
     )
     gw = CoreHttpGateway(t)
 

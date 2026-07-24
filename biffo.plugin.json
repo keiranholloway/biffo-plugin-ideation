@@ -103,15 +103,15 @@
         },
         {
           "name": "prd",
-          "type": "JSON",
+          "type": "Text",
           "nullable": true,
-          "description": "The high-level PRD (shape: ideation.definitions.PRD)."
+          "description": "The high-level PRD as a JSON string (shape: ideation.definitions.PRD). Text, not JSON: Core's plugin-table type map has no JSON type."
         },
         {
           "name": "scorecard",
-          "type": "JSON",
+          "type": "Text",
           "nullable": true,
-          "description": "The viability scorecard (shape: ideation.definitions.Scorecard)."
+          "description": "The viability scorecard as a JSON string (shape: ideation.definitions.Scorecard). Text, not JSON: Core's plugin-table type map has no JSON type."
         },
         {
           "name": "model",

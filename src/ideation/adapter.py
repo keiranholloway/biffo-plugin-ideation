@@ -23,6 +23,7 @@ Seam mapping (all under ``/api/v1``):
 
 from __future__ import annotations
 
+import json
 from typing import Any, Protocol
 
 from .models import GATHERING, Run, Session, TurnResult
@@ -56,6 +57,15 @@ class Transport(Protocol):
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any: ...
+
+
+def _load_json_column(value: Any) -> Any:
+    """Parse a Text column that holds JSON. Tolerates a dict (already parsed by a
+    JSON-typed transport) and None (returns None), so the caller need not care how
+    the value arrived."""
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
 
 
 def _session_from_row(row: dict[str, Any]) -> Session:
@@ -190,13 +200,17 @@ class CoreHttpGateway:
         scorecard: dict[str, Any],
         model: str | None,
     ) -> None:
+        # prd/scorecard are stored in Text columns (Core's plugin-table type map
+        # has no JSON type — an unknown type silently falls back to String, which
+        # would truncate the report), so they are JSON-serialised here and parsed
+        # back in get_report. Core stores/returns the string verbatim.
         await self._t.request(
             "POST",
             _REPORTS,
             json={
                 "session_id": session_id,
-                "prd": prd,
-                "scorecard": scorecard,
+                "prd": json.dumps(prd),
+                "scorecard": json.dumps(scorecard),
                 "model": model,
             },
         )
@@ -207,7 +221,7 @@ class CoreHttpGateway:
             return None
         row = rows[0]
         return {
-            "prd": row.get("prd"),
-            "scorecard": row.get("scorecard"),
+            "prd": _load_json_column(row.get("prd")),
+            "scorecard": _load_json_column(row.get("scorecard")),
             "model": row.get("model"),
         }
