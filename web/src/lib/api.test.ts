@@ -14,7 +14,7 @@ function mockFetch(status: number, body: unknown) {
 describe('createApi', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('starts a session at /ideation/api/sessions with the Bearer token', async () => {
+  it('starts a session at /ideation/api/sessions with the founder-token header', async () => {
     const f = mockFetch(201, {
       session_id: 's1',
       reply: 'why now?',
@@ -32,7 +32,11 @@ describe('createApi', () => {
     const [url, opts] = f.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/ideation/api/sessions')
     expect(opts.method).toBe('POST')
-    expect((opts.headers as Record<string, string>)['Authorization']).toBe('Bearer tok-123')
+    // The founder JWT rides X-Biffo-Founder-Token (not Authorization — CloudFront
+    // OAC claims Authorization for the SigV4 origin signature, ADR-0018).
+    const headers = opts.headers as Record<string, string>
+    expect(headers['X-Biffo-Founder-Token']).toBe('tok-123')
+    expect(headers['Authorization']).toBeUndefined()
     expect(JSON.parse(opts.body as string)).toEqual({ seed_idea: 'an idea' })
   })
 
