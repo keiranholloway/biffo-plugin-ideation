@@ -27,3 +27,33 @@ packages = ["src/ideation"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+
+# Match the platform's Ruff standard (Biffo core pyproject) so this plugin lints
+# clean when vendored into an instance — the instance enforces this select over
+# services/<plugin>/ with no third-party carve-out. Keep in step with core.
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "S", "UP"]
+ignore = ["S101"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Path",
+  "fastapi.Body",
+  "fastapi.Header",
+  "fastapi.Cookie",
+  "fastapi.Form",
+  "fastapi.File",
+  "fastapi.Security",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["S101", "S105", "S106", "S107"]
+
+[tool.ruff.format]
+quote-style = "double"

@@ -10,7 +10,8 @@ from typing import Any
 import httpx
 import pytest
 from botocore.credentials import Credentials
-from ideation.adapter import CoreHttpError, CoreNotFound
+
+from ideation.adapter import CoreHttpError, CoreNotFoundError
 from ideation.transport import FORWARDED_USER_HEADER, CoreTransport
 
 
@@ -21,9 +22,7 @@ class FakeHttpx:
         self.calls: list[dict[str, Any]] = []
 
     async def request(self, method, url, headers, content):  # noqa: ANN001
-        self.calls.append(
-            {"method": method, "url": url, "headers": headers, "content": content}
-        )
+        self.calls.append({"method": method, "url": url, "headers": headers, "content": content})
         return httpx.Response(self.status, content=json.dumps(self.body).encode())
 
 
@@ -78,18 +77,10 @@ def test_query_params_are_appended():
 
 
 def test_404_maps_to_core_not_found():
-    with pytest.raises(CoreNotFound):
-        _run(
-            _transport(FakeHttpx(404)).request(
-                "GET", "/api/v1/internal/owner-data/x/missing"
-            )
-        )
+    with pytest.raises(CoreNotFoundError):
+        _run(_transport(FakeHttpx(404)).request("GET", "/api/v1/internal/owner-data/x/missing"))
 
 
 def test_other_errors_map_to_core_http_error():
     with pytest.raises(CoreHttpError):
-        _run(
-            _transport(FakeHttpx(500)).request(
-                "POST", "/api/v1/internal/agent-runs", json={}
-            )
-        )
+        _run(_transport(FakeHttpx(500)).request("POST", "/api/v1/internal/agent-runs", json={}))

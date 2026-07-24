@@ -4,14 +4,16 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
+
 from ideation.definitions import (
     MAX_TURNS,
     MIN_TURNS,
-    REPORT_TOOL_NAME,
     PRD,
+    REPORT_TOOL_NAME,
     Report,
-    Scorecard,
     ScoreAxis,
+    Scorecard,
     analyst_definition,
     challenger_definition,
     report_tool_schema,
@@ -31,18 +33,16 @@ def test_scorecard_covers_every_requested_axis() -> None:
 def test_scores_are_bounded_one_to_five() -> None:
     ScoreAxis(score=1, rationale="ok")
     ScoreAxis(score=5, rationale="ok")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ScoreAxis(score=0, rationale="too low")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         ScoreAxis(score=6, rationale="too high")
 
 
 def test_challenger_is_a_single_turn_conversation_agent() -> None:
     d = challenger_definition(model="anthropic/claude-sonnet-4")
     assert d["tools"] == []  # conversation only, no tools
-    assert (
-        d["max_turns"] == 1
-    )  # one reply per user message; the 3–5 cap is the session's
+    assert d["max_turns"] == 1  # one reply per user message; the 3–5 cap is the session's
     instr = d["instructions"].lower()
     assert "one question per turn" in instr
     assert str(MAX_TURNS) in d["instructions"] and str(MIN_TURNS) in d["instructions"]
@@ -72,9 +72,7 @@ def test_report_tool_schema_is_the_report_model() -> None:
 
 def test_report_round_trips() -> None:
     report = Report(
-        prd=PRD(
-            problem="Independent coaches can't manage clients + payments in one place."
-        ),
+        prd=PRD(problem="Independent coaches can't manage clients + payments in one place."),
         scorecard=Scorecard(
             viability=ScoreAxis(score=4, rationale="Real recurring pain."),
             complexity=ScoreAxis(score=3, rationale="CRUD + payments; moderate."),
@@ -90,9 +88,7 @@ def test_report_round_trips() -> None:
 
 
 def test_manifest_declares_the_two_tables() -> None:
-    manifest = json.loads(
-        (Path(__file__).resolve().parents[1] / "biffo.plugin.json").read_text()
-    )
+    manifest = json.loads((Path(__file__).resolve().parents[1] / "biffo.plugin.json").read_text())
     tables = {t["name"] for t in manifest["tables"]}
     assert tables == {"ideation_sessions", "ideation_reports"}
     session_cols = {
@@ -101,7 +97,5 @@ def test_manifest_declares_the_two_tables() -> None:
         if t["name"] == "ideation_sessions"
         for c in t["columns"]
     }
-    assert (
-        "thread_id" in session_cols
-    )  # transcript lives in the run thread, not a messages table
+    assert "thread_id" in session_cols  # transcript lives in the run thread, not a messages table
     assert "ideation_messages" not in tables

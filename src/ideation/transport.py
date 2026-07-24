@@ -10,7 +10,7 @@ request; forwarding it lets Core be the authority (the plugin is defence-in-dept
 
 Built by subclassing ``SignedCoreClient`` to reuse its signing verbatim, adding
 only: arbitrary methods (the owner-data updates are ``PATCH``, which the base
-client lacks), the forwarded-user header, and the 404→``CoreNotFound`` mapping the
+client lacks), the forwarded-user header, and the 404→``CoreNotFoundError`` mapping the
 adapter's owner-scoped reads rely on.
 """
 
@@ -22,7 +22,7 @@ from urllib.parse import urlencode
 
 from biffo_plugin_sdk import SignedCoreClient
 
-from .adapter import CoreHttpError, CoreNotFound
+from .adapter import CoreHttpError, CoreNotFoundError
 
 #: Mirrors Core's ``middleware/forwarded_user.FORWARDED_USER_HEADER`` — keep in step.
 FORWARDED_USER_HEADER = "X-Biffo-User-Token"
@@ -63,13 +63,9 @@ class CoreTransport(SignedCoreClient):
         # Forwarded after signing: an unsigned header is fine (SigV4 verifies only
         # the signed set), and Core reads it separately to re-verify the founder.
         headers[FORWARDED_USER_HEADER] = self._founder_token
-        response = await self._client.request(
-            method, url, headers=headers, content=body
-        )
+        response = await self._client.request(method, url, headers=headers, content=body)
         if response.status_code == 404:
-            raise CoreNotFound(f"{method} {path} -> 404")
+            raise CoreNotFoundError(f"{method} {path} -> 404")
         if response.status_code >= 400:
-            raise CoreHttpError(
-                f"{method} {path} -> {response.status_code}: {response.text[:500]}"
-            )
+            raise CoreHttpError(f"{method} {path} -> {response.status_code}: {response.text[:500]}")
         return self._parse_json(response)

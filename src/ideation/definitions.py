@@ -47,18 +47,14 @@ ANALYST_AGENT_NAME = "ideation-analyst"
 class Competitor(BaseModel):
     name: str
     url: str | None = None
-    note: str = Field(
-        description="How they overlap with the idea, and where they are weak."
-    )
+    note: str = Field(description="How they overlap with the idea, and where they are weak.")
 
 
 class ScoreAxis(BaseModel):
     """One scored dimension: 1 (poor) … 5 (excellent), with a grounded rationale."""
 
     score: int = Field(ge=1, le=5)
-    rationale: str = Field(
-        description="One paragraph, grounded in the analysis — not vibes."
-    )
+    rationale: str = Field(description="One paragraph, grounded in the analysis — not vibes.")
 
 
 class Scorecard(BaseModel):
@@ -70,19 +66,15 @@ class Scorecard(BaseModel):
     complexity: ScoreAxis = Field(
         description="Build complexity. 5 = simple to build, 1 = very hard."
     )
-    economic_moat: ScoreAxis = Field(
-        description="Durable advantage / defensibility over time."
-    )
-    market_fit: ScoreAxis = Field(
-        description="Evidence of demand and a reachable, willing buyer."
-    )
+    economic_moat: ScoreAxis = Field(description="Durable advantage / defensibility over time.")
+    market_fit: ScoreAxis = Field(description="Evidence of demand and a reachable, willing buyer.")
     build_vs_buy: str = Field(
-        description="A recommendation — build, buy/partner, or hybrid — and why, given what already exists."
+        description=(
+            "A recommendation — build, buy/partner, or hybrid — and why, given what already exists."
+        )
     )
     competitors: list[Competitor] = Field(default_factory=list)
-    summary: str = Field(
-        description="Two or three candid sentences on overall viability."
-    )
+    summary: str = Field(description="Two or three candid sentences on overall viability.")
 
 
 class PRD(BaseModel):
@@ -91,9 +83,7 @@ class PRD(BaseModel):
 
     problem: str = Field(description="The crisp problem and who has it.")
     target_users: list[str] = Field(default_factory=list)
-    workflows: list[str] = Field(
-        default_factory=list, description="The core user workflows."
-    )
+    workflows: list[str] = Field(default_factory=list, description="The core user workflows.")
     data_entities: list[str] = Field(
         default_factory=list, description="The main things the application stores."
     )

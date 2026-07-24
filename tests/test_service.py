@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import Any
 
 import pytest
+
 from ideation.definitions import (
     CHALLENGER_AGENT_NAME,
     CHALLENGER_INSTRUCTIONS,
@@ -15,13 +16,13 @@ from ideation.definitions import (
 )
 from ideation.models import ANALYSING, COMPLETE, GATHERING, Run, Session, TurnResult
 from ideation.service import (
-    AnalysisFailed,
+    AnalysisFailedError,
     IdeationService,
-    MalformedReport,
-    NotEnoughTurns,
-    NotGathering,
-    SessionNotFound,
-    TurnLimitReached,
+    MalformedReportError,
+    NotEnoughTurnsError,
+    NotGatheringError,
+    SessionNotFoundError,
+    TurnLimitReachedError,
     extract_report,
 )
 
@@ -50,13 +51,9 @@ class FakeCore:
         messages: list[dict[str, Any]] | None = None,
         model: str | None = None,
     ) -> None:
-        self.runs[run_id] = Run(
-            id=run_id, status=status, messages=messages or [], model=model
-        )
+        self.runs[run_id] = Run(id=run_id, status=status, messages=messages or [], model=model)
 
-    async def create_session(
-        self, *, owner_sub: str, seed_idea: str, thread_id: str
-    ) -> Session:
+    async def create_session(self, *, owner_sub: str, seed_idea: str, thread_id: str) -> Session:
         self._seq += 1
         session = Session(
             id=f"s{self._seq}",
@@ -76,9 +73,7 @@ class FakeCore:
         return session
 
     async def set_turn_count(self, *, session_id: str, turn_count: int) -> None:
-        self.sessions[session_id] = replace(
-            self.sessions[session_id], turn_count=turn_count
-        )
+        self.sessions[session_id] = replace(self.sessions[session_id], turn_count=turn_count)
 
     async def set_status(
         self, *, session_id: str, status: str, analysis_run_id: str | None = None
@@ -246,9 +241,7 @@ class TestChat:
 
         async def scenario() -> None:
             s = await svc.start_session(owner_sub="u", seed_idea="SECRET-SEED")
-            await svc.chat_turn(
-                owner_sub="u", session_id=s.id, user_message="SECRET-SEED"
-            )
+            await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="SECRET-SEED")
 
         asyncio.run(scenario())
         assert "SECRET-SEED" not in core.turn_calls[0]["system_prompt"]
@@ -263,7 +256,7 @@ class TestChat:
             await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="2")
             await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="3")
 
-        with pytest.raises(TurnLimitReached):
+        with pytest.raises(TurnLimitReachedError):
             asyncio.run(scenario())
 
     def test_another_founders_session_is_invisible(self) -> None:
@@ -273,7 +266,7 @@ class TestChat:
             s = await svc.start_session(owner_sub="alice", seed_idea="idea")
             await svc.chat_turn(owner_sub="mallory", session_id=s.id, user_message="hi")
 
-        with pytest.raises(SessionNotFound):
+        with pytest.raises(SessionNotFoundError):
             asyncio.run(scenario())
 
 
@@ -306,7 +299,7 @@ class TestFinaliseAndReport:
         core = FakeCore()
         svc = _service(core, min_turns=3)
         sid = self._gathered(core, svc, turns=1)
-        with pytest.raises(NotEnoughTurns):
+        with pytest.raises(NotEnoughTurnsError):
             asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
 
     def test_cannot_finalise_twice(self) -> None:
@@ -318,7 +311,7 @@ class TestFinaliseAndReport:
             await svc.finalise(owner_sub="u", session_id=sid)
             await svc.finalise(owner_sub="u", session_id=sid)
 
-        with pytest.raises(NotGathering):
+        with pytest.raises(NotGatheringError):
             asyncio.run(scenario())
 
     def test_cannot_chat_after_finalising(self) -> None:
@@ -330,7 +323,7 @@ class TestFinaliseAndReport:
             await svc.finalise(owner_sub="u", session_id=sid)
             await svc.chat_turn(owner_sub="u", session_id=sid, user_message="more")
 
-        with pytest.raises(NotGathering):
+        with pytest.raises(NotGatheringError):
             asyncio.run(scenario())
 
     def test_get_report_materialises_the_completed_run_lazily(self) -> None:
@@ -373,9 +366,7 @@ class TestFinaliseAndReport:
                 messages=_analysis_run(_report_payload()),
                 model="m",
             )
-            await svc.get_report(
-                owner_sub="u", session_id=sid
-            )  # materialises → COMPLETE
+            await svc.get_report(owner_sub="u", session_id=sid)  # materialises → COMPLETE
             # A second poll on a COMPLETE session reads the stored report, it does not
             # re-extract from the run (which a test could no longer even resolve).
             core.runs.clear()
@@ -394,7 +385,7 @@ class TestFinaliseAndReport:
             core.resolve_run(run_id, status="failed")
             await svc.get_report(owner_sub="u", session_id=sid)
 
-        with pytest.raises(AnalysisFailed):
+        with pytest.raises(AnalysisFailedError):
             asyncio.run(scenario())
 
     def test_a_completed_run_without_a_report_is_malformed(self) -> None:
@@ -411,7 +402,7 @@ class TestFinaliseAndReport:
             )
             await svc.get_report(owner_sub="u", session_id=sid)
 
-        with pytest.raises(MalformedReport):
+        with pytest.raises(MalformedReportError):
             asyncio.run(scenario())
 
 
@@ -422,11 +413,11 @@ class TestExtractReport:
         assert report.scorecard.build_vs_buy == "build"
 
     def test_missing_tool_call_is_malformed(self) -> None:
-        with pytest.raises(MalformedReport):
+        with pytest.raises(MalformedReportError):
             extract_report([{"role": "assistant", "content": "I couldn't decide."}])
 
     def test_invalid_arguments_are_malformed(self) -> None:
         bad = _report_payload()
         bad["scorecard"]["viability"]["score"] = 99  # out of 1–5
-        with pytest.raises(MalformedReport):
+        with pytest.raises(MalformedReportError):
             extract_report(_analysis_run(bad))

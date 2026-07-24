@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from ideation.adapter import CoreHttpGateway, CoreNotFound
+from ideation.adapter import CoreHttpGateway, CoreNotFoundError
 from ideation.definitions import (
     CHALLENGER_AGENT_NAME,
     analyst_definition,
@@ -30,18 +30,14 @@ class FakeTransport:
         self._responses[(method, path)] = response
 
     async def request(self, method, path, *, json=None, params=None):
-        self.calls.append(
-            {"method": method, "path": path, "json": json, "params": params}
-        )
+        self.calls.append({"method": method, "path": path, "json": json, "params": params})
         response = self._responses.get((method, path), {})
         if isinstance(response, Exception):
             raise response
         return response
 
     def call(self, method: str, path: str) -> dict[str, Any]:
-        return next(
-            c for c in self.calls if c["method"] == method and c["path"] == path
-        )
+        return next(c for c in self.calls if c["method"] == method and c["path"] == path)
 
 
 def _run(gw_coro):
@@ -83,9 +79,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
     t.on("POST", _SESSIONS, _row())
     gw = CoreHttpGateway(t)
 
-    session = _run(
-        gw.create_session(owner_sub="alice", seed_idea="an idea", thread_id="th-1")
-    )
+    session = _run(gw.create_session(owner_sub="alice", seed_idea="an idea", thread_id="th-1"))
 
     body = t.call("POST", _SESSIONS)["json"]
     assert body == {
@@ -100,7 +94,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
 
 def test_get_session_maps_404_to_none():
     t = FakeTransport()
-    t.on("GET", f"{_SESSIONS}/missing", CoreNotFound())
+    t.on("GET", f"{_SESSIONS}/missing", CoreNotFoundError())
     gw = CoreHttpGateway(t)
     assert _run(gw.get_session(owner_sub="alice", session_id="missing")) is None
 
@@ -112,9 +106,7 @@ def test_set_turn_count_and_status_patch():
     _run(gw.set_turn_count(session_id="sess-1", turn_count=3))
     assert t.call("PATCH", f"{_SESSIONS}/sess-1")["json"] == {"turn_count": 3}
 
-    _run(
-        gw.set_status(session_id="sess-1", status="analysing", analysis_run_id="run-9")
-    )
+    _run(gw.set_status(session_id="sess-1", status="analysing", analysis_run_id="run-9"))
     assert t.calls[-1]["json"] == {"status": "analysing", "analysis_run_id": "run-9"}
 
 
@@ -209,7 +201,7 @@ def test_get_run_parses_status_messages_and_model():
 
 def test_get_run_maps_404_to_none():
     t = FakeTransport()
-    t.on("GET", f"{_RUNS}/gone", CoreNotFound())
+    t.on("GET", f"{_RUNS}/gone", CoreNotFoundError())
     gw = CoreHttpGateway(t)
     assert _run(gw.get_run(run_id="gone")) is None
 
@@ -220,9 +212,7 @@ def test_get_run_maps_404_to_none():
 def test_save_report_posts_without_owner():
     t = FakeTransport()
     gw = CoreHttpGateway(t)
-    _run(
-        gw.save_report(session_id="sess-1", prd={"p": 1}, scorecard={"s": 2}, model="m")
-    )
+    _run(gw.save_report(session_id="sess-1", prd={"p": 1}, scorecard={"s": 2}, model="m"))
     body = t.call("POST", _REPORTS)["json"]
     # prd/scorecard are JSON-serialised for the Text columns (Core has no JSON type)
     assert body == {

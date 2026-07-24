@@ -17,8 +17,8 @@ import os
 
 from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 from mangum import Mangum
 from pydantic import BaseModel, Field
 
@@ -26,14 +26,14 @@ from .adapter import CoreHttpGateway
 from .definitions import MAX_TURNS, MIN_TURNS
 from .models import ANALYSING, GATHERING
 from .service import (
-    AnalysisFailed,
+    AnalysisFailedError,
     IdeationError,
     IdeationService,
-    MalformedReport,
-    NotEnoughTurns,
-    NotGathering,
-    SessionNotFound,
-    TurnLimitReached,
+    MalformedReportError,
+    NotEnoughTurnsError,
+    NotGatheringError,
+    SessionNotFoundError,
+    TurnLimitReachedError,
 )
 from .transport import CoreTransport
 
@@ -61,21 +61,19 @@ app = FastAPI(title="Ideation Engine", docs_url=None, redoc_url=None)
 # Orchestration errors → HTTP. Registered once for the base class; the map keys on
 # the concrete type. Anything unmapped is a 400 (a bad request the founder can fix).
 _ERROR_STATUS: dict[type[IdeationError], int] = {
-    SessionNotFound: 404,
-    NotGathering: 409,
-    TurnLimitReached: 409,
-    NotEnoughTurns: 422,
-    AnalysisFailed: 502,
-    MalformedReport: 502,
+    SessionNotFoundError: 404,
+    NotGatheringError: 409,
+    TurnLimitReachedError: 409,
+    NotEnoughTurnsError: 422,
+    AnalysisFailedError: 502,
+    MalformedReportError: 502,
 }
 
 
 @app.exception_handler(IdeationError)
 async def _on_ideation_error(_: Request, exc: IdeationError) -> JSONResponse:
     status = _ERROR_STATUS.get(type(exc), 400)
-    return JSONResponse(
-        status_code=status, content={"detail": str(exc) or type(exc).__name__}
-    )
+    return JSONResponse(status_code=status, content={"detail": str(exc) or type(exc).__name__})
 
 
 class StartSessionRequest(BaseModel):

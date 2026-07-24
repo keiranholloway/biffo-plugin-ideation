@@ -45,34 +45,34 @@ class IdeationError(Exception):
     """Base for orchestration errors the transport maps to HTTP statuses."""
 
 
-class SessionNotFound(IdeationError):
+class SessionNotFoundError(IdeationError):
     """No such session for this founder (missing, or owned by someone else)."""
 
 
-class NotGathering(IdeationError):
+class NotGatheringError(IdeationError):
     """The action needs a session still in the gathering phase."""
 
 
-class TurnLimitReached(IdeationError):
+class TurnLimitReachedError(IdeationError):
     """The requirement-gathering conversation has hit its cap; finalise instead."""
 
 
-class NotEnoughTurns(IdeationError):
+class NotEnoughTurnsError(IdeationError):
     """Too few turns to produce a useful report yet."""
 
 
-class MalformedReport(IdeationError):
+class MalformedReportError(IdeationError):
     """The analysis run finished without a valid structured report."""
 
 
-class AnalysisFailed(IdeationError):
+class AnalysisFailedError(IdeationError):
     """The async analysis run failed; there is no report to produce."""
 
 
 def extract_report(run_messages: list[dict[str, Any]]) -> Report:
     """Pull the analyst's structured verdict out of its run transcript: find the
     ``submit_ideation_report`` tool call and validate its arguments against
-    ``Report``. Raises :class:`MalformedReport` if it's missing or invalid."""
+    ``Report``. Raises :class:`MalformedReportError` if it's missing or invalid."""
     for message in run_messages:
         for call in message.get("tool_calls") or []:
             function = call.get("function") or {}
@@ -83,8 +83,8 @@ def extract_report(run_messages: list[dict[str, Any]]) -> Report:
             try:
                 return Report.model_validate(data)
             except ValidationError as exc:
-                raise MalformedReport(str(exc)) from exc
-    raise MalformedReport(f"the analysis run produced no {REPORT_TOOL_NAME} tool call")
+                raise MalformedReportError(str(exc)) from exc
+    raise MalformedReportError(f"the analysis run produced no {REPORT_TOOL_NAME} tool call")
 
 
 class IdeationService:
@@ -115,22 +115,18 @@ class IdeationService:
         )
 
     async def _load_owned(self, *, owner_sub: str, session_id: str) -> Session:
-        session = await self._core.get_session(
-            owner_sub=owner_sub, session_id=session_id
-        )
+        session = await self._core.get_session(owner_sub=owner_sub, session_id=session_id)
         if session is None:
-            raise SessionNotFound(session_id)
+            raise SessionNotFoundError(session_id)
         return session
 
     async def get_session(self, *, owner_sub: str, session_id: str) -> Session:
         """The founder's session — its status and turn count, for the UI to poll
         (whether the chat may continue, and whether it may be finalised). Raises
-        :class:`SessionNotFound` for a missing or non-owned session."""
+        :class:`SessionNotFoundError` for a missing or non-owned session."""
         return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
 
-    async def chat_turn(
-        self, *, owner_sub: str, session_id: str, user_message: str
-    ) -> TurnResult:
+    async def chat_turn(self, *, owner_sub: str, session_id: str, user_message: str) -> TurnResult:
         """Run one buffered challenger turn and return the reply.
 
         The plugin only decides *whether* the turn may run (gathering, under the
@@ -141,9 +137,9 @@ class IdeationService:
         """
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         if session.status != GATHERING:
-            raise NotGathering(session.status)
+            raise NotGatheringError(session.status)
         if session.turn_count >= self._max_turns:
-            raise TurnLimitReached(self._max_turns)
+            raise TurnLimitReachedError(self._max_turns)
 
         result = await self._core.run_chat_turn(
             thread_id=session.thread_id,
@@ -153,9 +149,7 @@ class IdeationService:
             user_text=user_message,
             model=self._chat_model,
         )
-        await self._core.set_turn_count(
-            session_id=session_id, turn_count=session.turn_count + 1
-        )
+        await self._core.set_turn_count(session_id=session_id, turn_count=session.turn_count + 1)
         return result
 
     async def finalise(self, *, owner_sub: str, session_id: str) -> str:
@@ -165,9 +159,9 @@ class IdeationService:
         its first turn — so nothing is re-passed here."""
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         if session.status != GATHERING:
-            raise NotGathering(session.status)
+            raise NotGatheringError(session.status)
         if session.turn_count < self._min_turns:
-            raise NotEnoughTurns(session.turn_count)
+            raise NotEnoughTurnsError(session.turn_count)
 
         run_id = await self._core.request_analysis(
             thread_id=session.thread_id,
@@ -176,14 +170,10 @@ class IdeationService:
             definition=analyst_definition(model=self._analysis_model),
             output_tool=report_tool_schema(),
         )
-        await self._core.set_status(
-            session_id=session_id, status=ANALYSING, analysis_run_id=run_id
-        )
+        await self._core.set_status(session_id=session_id, status=ANALYSING, analysis_run_id=run_id)
         return run_id
 
-    async def get_report(
-        self, *, owner_sub: str, session_id: str
-    ) -> dict[str, Any] | None:
+    async def get_report(self, *, owner_sub: str, session_id: str) -> dict[str, Any] | None:
         """The founder's report, or ``None`` while still gathering/analysing.
 
         This is where the analysis run is *materialised into the report* — lazily,
@@ -193,7 +183,7 @@ class IdeationService:
         their report is exactly such a request. Once complete the write is not
         repeated.
 
-        Raises :class:`AnalysisFailed` if the run failed, and :class:`MalformedReport`
+        Raises :class:`AnalysisFailedError` if the run failed, and :class:`MalformedReportError`
         if it finished without a valid structured report.
         """
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
@@ -206,7 +196,7 @@ class IdeationService:
         if run is None or run.status not in RUN_TERMINAL:
             return None  # the analysis is still in flight
         if run.status != RUN_COMPLETED:
-            raise AnalysisFailed(session_id)
+            raise AnalysisFailedError(session_id)
 
         # Terminal + completed: extract, store, and mark complete — all under this
         # founder's request. `save_report` sends no owner; Core stamps it from the
