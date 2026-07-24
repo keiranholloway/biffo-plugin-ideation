@@ -7,6 +7,7 @@ are covered elsewhere (the SDK; the transport's own test).
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
 from typing import Any
 
@@ -123,7 +124,7 @@ def core() -> FakeCore:
 
 
 @pytest.fixture
-def client(core: FakeCore) -> TestClient:
+def client(core: FakeCore) -> Iterator[TestClient]:
     app.dependency_overrides[require_founder] = lambda: ForwardedUser(
         sub="alice", groups=["founder"], token="tok"
     )
