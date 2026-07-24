@@ -174,13 +174,19 @@ def challenger_definition(*, model: str) -> dict[str, Any]:
 
 
 def analyst_definition(*, model: str) -> dict[str, Any]:
-    """The async analysis agent: web search to research, then the report tool to
-    return structured output. ``max_turns`` allows several tool-use turns before
-    the final structured answer."""
+    """The async analysis agent: web search to research, then the report *output
+    tool* to return structured output. ``max_turns`` allows several tool-use turns
+    before the final structured answer.
+
+    ``tools`` names only **registry** tools (``web_search``); the report tool is an
+    *output tool* — offered to the model via the run's ``output_tools`` (see
+    :func:`report_tool_schema`), never resolved against the runtime registry. Putting
+    ``submit_ideation_report`` in ``tools`` would fail the run as an unknown tool
+    (ADR-0017 §5 / agent-runtime tool registry)."""
     return {
         "instructions": ANALYST_INSTRUCTIONS,
         "model": model,
-        "tools": ["web_search", REPORT_TOOL_NAME],
+        "tools": ["web_search"],
         "max_turns": 8,
     }
 

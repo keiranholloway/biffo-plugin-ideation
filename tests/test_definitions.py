@@ -50,8 +50,11 @@ def test_challenger_is_a_single_turn_conversation_agent() -> None:
 
 def test_analyst_researches_then_returns_structured_output() -> None:
     d = analyst_definition(model="anthropic/claude-opus-4-8")
-    assert "web_search" in d["tools"]
-    assert REPORT_TOOL_NAME in d["tools"]
+    # `tools` names only registry tools; the report is an OUTPUT tool, offered via
+    # output_tools, never resolved against the registry (would fail the run).
+    assert d["tools"] == ["web_search"]
+    assert REPORT_TOOL_NAME not in d["tools"]
+    assert report_tool_schema()["function"]["name"] == REPORT_TOOL_NAME
     instr = d["instructions"].lower()
     assert "build-vs-buy" in instr
     assert "competitive landscape" in instr
