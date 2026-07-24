@@ -39,14 +39,14 @@ class CoreHttpError(Exception):
     """A Core call failed (non-2xx other than the not-found the adapter handles)."""
 
 
-class CoreNotFound(CoreHttpError):
+class CoreNotFoundError(CoreHttpError):
     """A Core call returned 404 — mapped to ``None`` for the owner-scoped reads."""
 
 
 class Transport(Protocol):
     """The one network boundary. An implementation SigV4-signs the request as the
     plugin's service principal and forwards the founder's Cognito token; it returns
-    the parsed JSON body on 2xx, raises :class:`CoreNotFound` on 404, and
+    the parsed JSON body on 2xx, raises :class:`CoreNotFoundError` on 404, and
     :class:`CoreHttpError` on any other non-2xx."""
 
     async def request(
@@ -88,9 +88,7 @@ class CoreHttpGateway:
     def __init__(self, transport: Transport) -> None:
         self._t = transport
 
-    async def create_session(
-        self, *, owner_sub: str, seed_idea: str, thread_id: str
-    ) -> Session:
+    async def create_session(self, *, owner_sub: str, seed_idea: str, thread_id: str) -> Session:
         row = await self._t.request(
             "POST",
             _SESSIONS,
@@ -106,14 +104,12 @@ class CoreHttpGateway:
     async def get_session(self, *, owner_sub: str, session_id: str) -> Session | None:
         try:
             row = await self._t.request("GET", f"{_SESSIONS}/{session_id}")
-        except CoreNotFound:
+        except CoreNotFoundError:
             return None
         return _session_from_row(row)
 
     async def set_turn_count(self, *, session_id: str, turn_count: int) -> None:
-        await self._t.request(
-            "PATCH", f"{_SESSIONS}/{session_id}", json={"turn_count": turn_count}
-        )
+        await self._t.request("PATCH", f"{_SESSIONS}/{session_id}", json={"turn_count": turn_count})
 
     async def set_status(
         self, *, session_id: str, status: str, analysis_run_id: str | None = None
@@ -160,9 +156,7 @@ class CoreHttpGateway:
     ) -> str:
         # The async run builds from input_payload (not a thread), so hand it the
         # conversation. The report tool is an OUTPUT tool, offered via output_tools.
-        conversation = await self._t.request(
-            "GET", f"{_AGENT_RUNS}/threads/{thread_id}/messages"
-        )
+        conversation = await self._t.request("GET", f"{_AGENT_RUNS}/threads/{thread_id}/messages")
         snapshot = {**definition, "output_tools": [output_tool]}
         run = await self._t.request(
             "POST",
@@ -179,12 +173,10 @@ class CoreHttpGateway:
     async def get_run(self, *, run_id: str) -> Run | None:
         try:
             run = await self._t.request("GET", f"{_AGENT_RUNS}/{run_id}")
-        except CoreNotFound:
+        except CoreNotFoundError:
             return None
         result = run.get("result") or {}
-        model = result.get("model") or (run.get("definition_snapshot") or {}).get(
-            "model"
-        )
+        model = result.get("model") or (run.get("definition_snapshot") or {}).get("model")
         return Run(
             id=run["id"],
             status=run["status"],

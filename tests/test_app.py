@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from biffo_plugin_sdk import ForwardedUser
 from fastapi.testclient import TestClient
+
 from ideation.app import app, get_service, require_founder
 from ideation.models import GATHERING, Run, Session, TurnResult
 from ideation.service import IdeationService
@@ -64,9 +65,7 @@ class FakeCore:
         return s if s is not None and s.owner_sub == owner_sub else None
 
     async def set_turn_count(self, *, session_id, turn_count) -> None:
-        self.sessions[session_id] = replace(
-            self.sessions[session_id], turn_count=turn_count
-        )
+        self.sessions[session_id] = replace(self.sessions[session_id], turn_count=turn_count)
 
     async def set_status(self, *, session_id, status, analysis_run_id=None) -> None:
         cur = self.sessions[session_id]
@@ -150,9 +149,7 @@ def test_full_gathering_then_finalise_then_report(client, core):
     sid = client.post("/sessions", json={"seed_idea": "idea"}).json()["session_id"]
     # two more turns → 3 total (>= MIN_TURNS)
     client.post(f"/sessions/{sid}/messages", json={"message": "answer 1"})
-    state = client.post(
-        f"/sessions/{sid}/messages", json={"message": "answer 2"}
-    ).json()
+    state = client.post(f"/sessions/{sid}/messages", json={"message": "answer 2"}).json()
     assert state["turn_count"] == 3
     assert state["can_finalise"] is True
 
@@ -184,7 +181,7 @@ def test_chat_after_finalise_is_409(client):
     client.post(f"/sessions/{sid}/messages", json={"message": "b"})
     client.post(f"/sessions/{sid}/finalise")
     resp = client.post(f"/sessions/{sid}/messages", json={"message": "more"})
-    assert resp.status_code == 409  # NotGathering
+    assert resp.status_code == 409  # NotGatheringError
 
 
 def test_the_app_is_gated_without_a_token(core):
