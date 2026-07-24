@@ -1,7 +1,8 @@
 // Calls THIS module's own Lambda ingress only (never Core directly — ADR-0002).
 // Same-origin, path-routed at <base>/ideation/api/* on the shared CloudFront; the
-// founder's Cognito id token is forwarded as a Bearer token, which the Lambda
-// verifies (require_group("founder")) before doing anything.
+// founder's Cognito id token is sent in the X-Biffo-Founder-Token header (behind
+// CloudFront OAC, Authorization carries the SigV4 origin signature — ADR-0018),
+// which the Lambda verifies (require_group("founder")) before doing anything.
 
 const API_BASE = '/ideation/api'
 
@@ -78,7 +79,10 @@ export function createApi(getIdToken: () => string | null) {
       method,
       headers: {
         'Content-Type': 'application/json',
-        ...(token != null ? { Authorization: `Bearer ${token}` } : {}),
+        // The founder id token rides X-Biffo-Founder-Token, NOT Authorization:
+        // behind CloudFront OAC (ADR-0018) the Authorization header is consumed by
+        // the SigV4 origin signature, so the app reads the JWT from this header.
+        ...(token != null ? { 'X-Biffo-Founder-Token': token } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })

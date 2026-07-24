@@ -72,18 +72,23 @@ module "function" {
 # (require_group verifies the shared-Cognito JWT). CORS is unnecessary — the
 # frontend and the api are same-origin under the shared distribution.
 resource "aws_lambda_function_url" "ingress" {
-  function_name      = module.function.function_name
-  authorization_type = "NONE"
+  function_name = module.function.function_name
+  # AWS_IAM, NOT public: a governed account blocks public (NONE) Function URLs.
+  # CloudFront invokes it via Origin Access Control (SigV4) — see the permission
+  # below — so it is reachable only through the shared distribution, and the
+  # Lambda's own founder-JWT gate authorizes the caller.
+  authorization_type = "AWS_IAM"
 }
 
-# NONE auth still needs an explicit resource policy permitting public invoke of
-# the Function URL; the Lambda's own JWT gate is what actually protects it.
-resource "aws_lambda_permission" "function_url" {
-  statement_id           = "AllowPublicFunctionUrlInvoke"
+# Only CloudFront (this project's distribution, via OAC) may invoke the Function
+# URL. Scoped to the distribution ARN so no other distribution or principal can.
+resource "aws_lambda_permission" "function_url_cloudfront" {
+  statement_id           = "AllowCloudFrontOACInvoke"
   action                 = "lambda:InvokeFunctionUrl"
   function_name          = module.function.function_name
-  principal              = "*"
-  function_url_auth_type = "NONE"
+  principal              = "cloudfront.amazonaws.com"
+  source_arn             = var.cdn_distribution_arn
+  function_url_auth_type = "AWS_IAM"
 }
 
 # Core API access (ADR-0009): SigV4-signed calls to /api/v1/internal/* only. The
