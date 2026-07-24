@@ -18,18 +18,22 @@ from ideation.manifest import MANIFEST_PATH
 # unit of compatibility"). Each maps to a CoreGateway seam the plugin depends on:
 #   chat-turn                    -> run_chat_turn (the buffered challenger turn)
 #   agent-run-request            -> request_analysis (kick the async analyst run)
+#   agent-run-read               -> get_run (poll the analyst run's status)
 #   run-output-tool              -> the submit_ideation_report inline tool schema
+#   thread-messages-read         -> read the gathering conversation for the analyst
 #   owner-scoped-tables          -> session/report reads+writes on closed tables
 #   chat-agent-registry          -> registering the challenger/analyst at install
-#   event:agent.run.completed    -> complete_analysis on the run's completion
+# (No event:* — completion is materialised lazily on get_report, not via a
+#  subscriber, so the plugin binds no event capability.)
 REQUIRED_CAPABILITIES = frozenset(
     {
         "chat-turn",
         "agent-run-request",
+        "agent-run-read",
         "run-output-tool",
+        "thread-messages-read",
         "owner-scoped-tables",
         "chat-agent-registry",
-        "event:agent.run.completed",
     }
 )
 
@@ -84,3 +88,18 @@ def test_every_table_is_owner_scoped_on_a_real_column() -> None:
         assert access["owner_column"] in column_names, (
             f"{table['name']} owner_column must be a declared column"
         )
+
+
+def test_declares_a_founder_gated_user_ingress_pointing_at_the_lambda() -> None:
+    # ADR-0018 §1: the authenticated Lambda ingress. The handler must be the app
+    # module's Mangum handler, gated to the founder group.
+    ingress = _manifest()["user_ingress"]
+    assert ingress["required_group"] == "founder"
+    assert ingress["handler"] == "ideation.app.handler"
+    assert "/" not in ingress["path"]  # a single path segment
+
+
+def test_declares_a_founder_gated_user_frontend() -> None:
+    frontend = _manifest()["user_frontend"]
+    assert frontend["required_group"] == "founder"
+    assert frontend["dir"]  # the built static export directory

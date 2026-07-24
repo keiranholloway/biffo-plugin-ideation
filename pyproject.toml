@@ -3,11 +3,17 @@ name = "biffo-plugin-ideation"
 version = "0.1.0"
 description = "Ideation Engine — an agentic module that pressure-tests a founder's idea and produces a PRD + viability scorecard. A user-facing Biffo module (ADR-0003 plugin + ADR-0016 sync run/thread spine)."
 requires-python = ">=3.13"
-# NOTE: the Lambda (chat orchestration on the ADR-0016 Function-URL spine) will
-# add `biffo-plugin-sdk`, `aws-lambda-powertools[tracer]` and `httpx` once the
-# spine has landed. The data model (biffo.plugin.json) and the agent definitions
-# below depend only on pydantic, so they can be authored and tested now.
-dependencies = ["pydantic>=2.10.4"]
+dependencies = [
+  "pydantic>=2.10.4",
+  # The founder-gated Lambda (ADR-0018): the SDK's require_group gate (user-serving)
+  # + SigV4 signing for the Core seams (sigv4 -> botocore). biffo-plugin-sdk 1.1.0
+  # is on PyPI, so this resolves normally.
+  "biffo-plugin-sdk[user-serving,sigv4]>=1.1,<2.0",
+  "fastapi>=0.115.0",
+  "mangum>=0.19.0",
+  "httpx>=0.28.1",
+  "aws-lambda-powertools>=3.4.0",
+]
 
 [dependency-groups]
 dev = ["pytest>=8.3.4", "ruff>=0.8.0", "pyright>=1.1.0", "jsonschema>=4.23.0"]

@@ -8,10 +8,20 @@
   "core_capabilities": {
     "chat-turn": "^1",
     "agent-run-request": "^1",
+    "agent-run-read": "^1",
     "run-output-tool": "^1",
+    "thread-messages-read": "^1",
     "owner-scoped-tables": "^1",
-    "chat-agent-registry": "^1",
-    "event:agent.run.completed": "^1"
+    "chat-agent-registry": "^1"
+  },
+  "user_ingress": {
+    "path": "api",
+    "required_group": "founder",
+    "handler": "ideation.app.handler"
+  },
+  "user_frontend": {
+    "dir": "web/dist",
+    "required_group": "founder"
   },
   "tables": [
     {
@@ -135,6 +145,6 @@
   "event_subscriptions": [],
   "ui_components": [],
   "dependencies": {
-    "biffo-plugin-sdk": "^1.0"
+    "biffo-plugin-sdk": "^1.1"
   }
 }

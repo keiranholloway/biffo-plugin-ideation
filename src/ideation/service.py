@@ -122,6 +122,12 @@ class IdeationService:
             raise SessionNotFound(session_id)
         return session
 
+    async def get_session(self, *, owner_sub: str, session_id: str) -> Session:
+        """The founder's session — its status and turn count, for the UI to poll
+        (whether the chat may continue, and whether it may be finalised). Raises
+        :class:`SessionNotFound` for a missing or non-owned session."""
+        return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+
     async def chat_turn(
         self, *, owner_sub: str, session_id: str, user_message: str
     ) -> TurnResult:
