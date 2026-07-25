@@ -72,6 +72,7 @@ export default function App() {
         if (r.report) {
           setReport(r.report)
           setSession((s) => (s ? { ...s, status: 'complete' } : s))
+          setView({ kind: 'report', sessionId: session.session_id })
           await refreshSessions()
           return
         }
@@ -97,6 +98,14 @@ export default function App() {
   }
 
   async function handleSelectSession(clicked: SessionSummary) {
+    // Stop any polling tied to a previously-viewed live session (its effect
+    // depends on `session`, so clearing it unmounts that poll) and clear a
+    // stale report from whatever was viewed before — both views below set
+    // exactly the state they need, no leftovers from the prior selection.
+    setSession(null)
+    setReport(null)
+    setMessages([])
+
     if (clicked.status === 'complete') {
       setView({ kind: 'report', sessionId: clicked.session_id })
       try {
