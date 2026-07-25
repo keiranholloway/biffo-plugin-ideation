@@ -86,6 +86,31 @@ class MessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=16_000)
 
 
+@app.get("/sessions")
+async def list_sessions(
+    founder: ForwardedUser = Depends(require_founder),
+    svc: IdeationService = Depends(get_service),
+) -> list[dict]:
+    """Every past run for this founder, most-recent-first — for the session nav."""
+    sessions = await svc.list_sessions(owner_sub=founder.sub)
+    return [_summary(s) for s in sessions]
+
+
+def _derive_title(seed_idea: str, *, max_len: int = 60) -> str:
+    """A display title from the seed idea when none was explicitly set: trim to
+    ~max_len chars at a word boundary, with an ellipsis if truncated."""
+    stripped = seed_idea.strip()
+    if len(stripped) <= max_len:
+        return stripped
+    # Truncate to max_len, then back up to the last space to avoid cutting a word
+    truncated = stripped[:max_len]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        return truncated[:last_space] + "…"
+    # No space found within max_len; hard-truncate and add ellipsis
+    return truncated + "…"
+
+
 def _state(session) -> dict:  # type: ignore[no-untyped-def]
     return {
         "session_id": session.id,
@@ -94,6 +119,15 @@ def _state(session) -> dict:  # type: ignore[no-untyped-def]
         "min_turns": MIN_TURNS,
         "max_turns": MAX_TURNS,
         "can_finalise": session.status == GATHERING and session.turn_count >= MIN_TURNS,
+    }
+
+
+def _summary(session) -> dict:  # type: ignore[no-untyped-def]
+    return {
+        "session_id": session.id,
+        "title": session.title or _derive_title(session.seed_idea),
+        "status": session.status,
+        "created_at": session.created_at,
     }
 
 
