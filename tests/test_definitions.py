@@ -99,3 +99,46 @@ def test_manifest_declares_the_two_tables() -> None:
     }
     assert "thread_id" in session_cols  # transcript lives in the run thread, not a messages table
     assert "ideation_messages" not in tables
+
+
+def test_scorecard_coerces_an_over_structured_build_vs_buy_to_a_string() -> None:
+    """The output-tool schema says build_vs_buy is a string, but the model sometimes
+    returns a dict like {"build": "hybrid", "text": "..."}. That must not 502 the
+    whole report — flatten it to a sentence (regression for the live 502)."""
+    from ideation.definitions import Report
+
+    report = Report.model_validate(
+        {
+            "prd": {"problem": "p"},
+            "scorecard": {
+                "viability": {"score": 3, "rationale": "r"},
+                "complexity": {"score": 3, "rationale": "r"},
+                "economic_moat": {"score": 3, "rationale": "r"},
+                "market_fit": {"score": 3, "rationale": "r"},
+                "build_vs_buy": {"build": "hybrid", "text": "Lean on existing tools first."},
+                "summary": "ok",
+            },
+        }
+    )
+    assert isinstance(report.scorecard.build_vs_buy, str)
+    assert "Hybrid" in report.scorecard.build_vs_buy
+    assert "Lean on existing tools first." in report.scorecard.build_vs_buy
+
+
+def test_scorecard_leaves_a_plain_string_build_vs_buy_untouched() -> None:
+    from ideation.definitions import Report
+
+    report = Report.model_validate(
+        {
+            "prd": {"problem": "p"},
+            "scorecard": {
+                "viability": {"score": 3, "rationale": "r"},
+                "complexity": {"score": 3, "rationale": "r"},
+                "economic_moat": {"score": 3, "rationale": "r"},
+                "market_fit": {"score": 3, "rationale": "r"},
+                "build_vs_buy": "Build it — nothing off the shelf fits.",
+                "summary": "ok",
+            },
+        }
+    )
+    assert report.scorecard.build_vs_buy == "Build it — nothing off the shelf fits."
