@@ -70,6 +70,13 @@ export interface ReportResponse {
   report: Report | null
 }
 
+export interface SessionSummary {
+  session_id: string
+  title: string
+  status: 'gathering' | 'analysing' | 'complete'
+  created_at: string
+}
+
 export type Api = ReturnType<typeof createApi>
 
 export function createApi(getIdToken: () => string | null) {
@@ -104,5 +111,6 @@ export function createApi(getIdToken: () => string | null) {
     finalise: (id: string) =>
       request<{ status: string; analysis_run_id: string }>('POST', `/sessions/${id}/finalise`),
     getReport: (id: string) => request<ReportResponse>('GET', `/sessions/${id}/report`),
+    listSessions: () => request<SessionSummary[]>('GET', '/sessions'),
   }
 }

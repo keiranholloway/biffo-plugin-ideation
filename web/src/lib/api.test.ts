@@ -67,4 +67,22 @@ describe('createApi', () => {
     const opts = (f.mock.calls[0] as [string, RequestInit])[1]
     expect((opts.headers as Record<string, string>)['Authorization']).toBeUndefined()
   })
+
+  it('fetches sessions list at /api/v1/plugins/ideation/sessions with GET', async () => {
+    const sessionList = [
+      { session_id: 's1', title: 'First idea', status: 'complete' as const, created_at: '2026-07-25T10:00:00Z' },
+      { session_id: 's2', title: 'Second idea', status: 'gathering' as const, created_at: '2026-07-24T15:30:00Z' },
+    ]
+    const f = mockFetch(200, sessionList)
+    const api = createApi(() => 'tok-456')
+
+    const r = await api.listSessions()
+
+    expect(r).toEqual(sessionList)
+    const [url, opts] = f.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/v1/plugins/ideation/sessions')
+    expect(opts.method).toBe('GET')
+    const headers = opts.headers as Record<string, string>
+    expect(headers['Authorization']).toBe('Bearer tok-456')
+  })
 })
