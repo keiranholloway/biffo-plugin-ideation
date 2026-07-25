@@ -8,5 +8,5 @@ export default defineConfig({
   base: '/ideation/',
   plugins: [react()],
   build: { outDir: 'dist' },
-  test: { environment: 'jsdom', globals: true, setupFiles: [] },
+  test: { environment: 'jsdom', globals: true, setupFiles: ['./src/test-setup.ts'] },
 })
