@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # The requirement-gathering conversation is deliberately short: enough to draft a
 # PRD, not a full discovery. The cap is enforced by the session's turn_count, and
@@ -75,6 +75,26 @@ class Scorecard(BaseModel):
     )
     competitors: list[Competitor] = Field(default_factory=list)
     summary: str = Field(description="Two or three candid sentences on overall viability.")
+
+    @field_validator("build_vs_buy", "summary", mode="before")
+    @classmethod
+    def _flatten_if_structured(cls, value: Any) -> Any:
+        """Tolerate the model over-structuring a prose field. The schema says these
+        are strings (Report.model_json_schema drives the output tool), but the model
+        sometimes returns e.g. build_vs_buy as {"build": "hybrid", "text": "..."}
+        despite the schema — a common LLM deviation, and this field's description
+        invites it. Flatten a dict to a readable sentence rather than 502-ing the
+        whole report on a validation error the founder can do nothing about."""
+        if isinstance(value, dict):
+            verdict = value.get("build") or value.get("recommendation") or value.get("verdict")
+            prose = value.get("text") or value.get("rationale") or value.get("why") or value.get(
+                "summary"
+            )
+            if verdict and prose:
+                return f"{str(verdict).strip().capitalize()} — {str(prose).strip()}"
+            parts = [str(v).strip() for v in value.values() if isinstance(v, str) and v.strip()]
+            return " — ".join(parts) if parts else str(value)
+        return value
 
 
 class PRD(BaseModel):
