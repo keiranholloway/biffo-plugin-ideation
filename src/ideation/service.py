@@ -126,6 +126,11 @@ class IdeationService:
         :class:`SessionNotFoundError` for a missing or non-owned session."""
         return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
 
+    async def list_sessions(self, *, owner_sub: str) -> list[Session]:
+        """The founder's sessions, most-recent-first."""
+        sessions = await self._core.list_sessions(owner_sub=owner_sub)
+        return sorted(sessions, key=lambda s: s.created_at or "", reverse=True)
+
     async def chat_turn(self, *, owner_sub: str, session_id: str, user_message: str) -> TurnResult:
         """Run one buffered challenger turn and return the reply.
 

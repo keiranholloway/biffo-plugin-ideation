@@ -117,6 +117,28 @@ def test_set_status_omits_run_id_when_absent():
     assert t.calls[-1]["json"] == {"status": "complete"}
 
 
+def test_list_sessions_maps_rows_including_created_at():
+    t = FakeTransport()
+    t.on(
+        "GET",
+        _SESSIONS,
+        [
+            _row(id="s1", created_at="2026-07-25T10:00:00Z"),
+            _row(id="s2", created_at="2026-07-24T15:30:00Z"),
+        ],
+    )
+    gw = CoreHttpGateway(t)
+
+    sessions = _run(gw.list_sessions(owner_sub="alice"))
+
+    assert t.call("GET", _SESSIONS)["params"] is None
+    assert len(sessions) == 2
+    assert sessions[0].id == "s1"
+    assert sessions[0].created_at == "2026-07-25T10:00:00Z"
+    assert sessions[1].id == "s2"
+    assert sessions[1].created_at == "2026-07-24T15:30:00Z"
+
+
 # ── chat turn (agent-chat) ───────────────────────────────────────────────────────
 
 

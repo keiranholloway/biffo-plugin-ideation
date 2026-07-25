@@ -38,6 +38,13 @@ class CoreGateway(Protocol):
 
     async def get_session(self, *, owner_sub: str, session_id: str) -> Session | None: ...
 
+    async def list_sessions(self, *, owner_sub: str) -> list[Session]:
+        """Every session owned by this founder, in no particular order — the
+        caller sorts. Core's owner-scoped list route already restricts rows to
+        the caller (ADR-0017 §5); ``owner_sub`` is accepted here for parity
+        with the rest of this port and used by non-HTTP adapters/fakes."""
+        ...
+
     async def set_turn_count(self, *, session_id: str, turn_count: int) -> None: ...
 
     async def set_status(

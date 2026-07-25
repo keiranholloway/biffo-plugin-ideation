@@ -79,6 +79,7 @@ def _session_from_row(row: dict[str, Any]) -> Session:
         turn_count=row.get("turn_count") or 0,
         analysis_run_id=row.get("analysis_run_id"),
         title=row.get("title"),
+        created_at=row.get("created_at"),
     )
 
 
@@ -107,6 +108,12 @@ class CoreHttpGateway:
         except CoreNotFoundError:
             return None
         return _session_from_row(row)
+
+    async def list_sessions(self, *, owner_sub: str) -> list[Session]:
+        # No params: Core's owner-data list route already scopes to the caller
+        # via the forwarded token, so nothing further is filtered here.
+        rows = await self._t.request("GET", _SESSIONS)
+        return [_session_from_row(row) for row in rows]
 
     async def set_turn_count(self, *, session_id: str, turn_count: int) -> None:
         await self._t.request("PATCH", f"{_SESSIONS}/{session_id}", json={"turn_count": turn_count})

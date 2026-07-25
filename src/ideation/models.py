@@ -30,6 +30,7 @@ class Session:
     turn_count: int
     analysis_run_id: str | None = None
     title: str | None = None
+    created_at: str | None = None
 
 
 @dataclass(frozen=True)
