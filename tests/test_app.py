@@ -16,7 +16,7 @@ from biffo_plugin_sdk import ForwardedUser
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from ideation.app import app, get_service, require_founder
+from ideation.app import _derive_title, app, get_service, require_founder
 from ideation.models import GATHERING, Run, Session, TurnResult
 from ideation.service import IdeationService
 
@@ -207,3 +207,107 @@ def test_exposes_an_asgi_app_not_a_lambda_handler() -> None:
 
     assert isinstance(app_module.app, FastAPI)
     assert not hasattr(app_module, "handler")
+
+
+class TestDeriveTitle:
+    def test_short_string_unchanged(self):
+        result = _derive_title("build a coaching app")
+        assert result == "build a coaching app"
+
+    def test_long_string_truncated_at_word_boundary(self):
+        long_idea = (
+            "I want to build an app that helps coaches manage their admin tasks and scheduling"
+        )
+        result = _derive_title(long_idea, max_len=60)
+        assert result.endswith("…")
+        assert len(result) <= 62  # max_len + len("…")
+        assert not result.endswith(" …")  # No trailing space before ellipsis
+
+    def test_long_string_with_no_space_within_max_len_hard_truncates(self):
+        # A pathological case: a single very long word
+        long_word = "x" * 80
+        result = _derive_title(long_word, max_len=60)
+        assert result == "x" * 60 + "…"
+
+    def test_leading_and_trailing_whitespace_stripped(self):
+        idea = "   idea with spaces   "
+        result = _derive_title(idea, max_len=100)
+        assert result == "idea with spaces"
+
+
+def test_list_sessions_empty_when_no_sessions(client):
+    resp = client.get("/sessions")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_sessions_returns_summaries_in_service_order(client, core):
+    # Create two sessions for alice
+    s1_id = client.post("/sessions", json={"seed_idea": "first idea"}).json()["session_id"]
+    s2_id = client.post("/sessions", json={"seed_idea": "second idea"}).json()["session_id"]
+
+    resp = client.get("/sessions")
+    assert resp.status_code == 200
+    summaries = resp.json()
+    assert len(summaries) == 2
+    # They should come in the order the service returns them
+    assert summaries[0]["session_id"] == s1_id
+    assert summaries[1]["session_id"] == s2_id
+
+
+def test_list_sessions_uses_explicit_title_when_set(client, core):
+    seed = "an idea"
+    sid = client.post("/sessions", json={"seed_idea": seed}).json()["session_id"]
+    # Manually set a title on the session
+    core.sessions[sid] = replace(core.sessions[sid], title="Explicit Title")
+
+    resp = client.get("/sessions")
+    assert resp.status_code == 200
+    summaries = resp.json()
+    assert len(summaries) == 1
+    assert summaries[0]["title"] == "Explicit Title"
+
+
+def test_list_sessions_derives_title_from_seed_idea_when_not_set(client, core):
+    # Use a seed_idea longer than 60 chars to exercise truncation
+    long_seed = "I want to build an app that helps coaches manage their admin and scheduling"
+    client.post("/sessions", json={"seed_idea": long_seed})
+
+    resp = client.get("/sessions")
+    assert resp.status_code == 200
+    summaries = resp.json()
+    assert len(summaries) == 1
+    summary = summaries[0]
+    # Title should be derived from seed_idea and truncated
+    assert summary["title"].endswith("…")
+    assert summary["title"] != long_seed  # Should be truncated
+    assert len(summary["title"]) < len(long_seed)
+
+
+def test_list_sessions_includes_status_and_created_at(client, core):
+    sid = client.post("/sessions", json={"seed_idea": "test idea"}).json()["session_id"]
+    # Set created_at on the session
+    core.sessions[sid] = replace(core.sessions[sid], created_at="2026-07-25T10:00:00Z")
+
+    resp = client.get("/sessions")
+    assert resp.status_code == 200
+    summaries = resp.json()
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert "status" in summary
+    assert summary["status"] == GATHERING
+    assert "created_at" in summary
+    assert summary["created_at"] == "2026-07-25T10:00:00Z"
+
+
+def test_list_sessions_response_shape(client):
+    """Verify the response has exactly the expected keys."""
+    client.post("/sessions", json={"seed_idea": "test"})
+
+    resp = client.get("/sessions")
+    assert resp.status_code == 200
+    summaries = resp.json()
+    assert len(summaries) == 1
+    summary = summaries[0]
+    # Should have exactly these keys: session_id, title, status, created_at
+    assert set(summary.keys()) == {"session_id", "title", "status", "created_at"}
