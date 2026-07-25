@@ -72,6 +72,10 @@ class FakeCore:
             return None  # owner-scoped: another founder's session is invisible
         return session
 
+    async def list_sessions(self, *, owner_sub: str) -> list[Session]:
+        """Return sessions owned by this founder, in no particular order."""
+        return [s for s in self.sessions.values() if s.owner_sub == owner_sub]
+
     async def set_turn_count(self, *, session_id: str, turn_count: int) -> None:
         self.sessions[session_id] = replace(self.sessions[session_id], turn_count=turn_count)
 
@@ -404,6 +408,65 @@ class TestFinaliseAndReport:
 
         with pytest.raises(MalformedReportError):
             asyncio.run(scenario())
+
+
+class TestListSessions:
+    def test_list_sessions_returns_owner_sessions_sorted_by_recency(self) -> None:
+        core = FakeCore()
+        svc = _service(core)
+
+        async def scenario() -> list[Session]:
+            # Create sessions with deliberately out-of-order created_at values
+            s1 = await svc.start_session(owner_sub="alice", seed_idea="second")
+            s1 = replace(s1, created_at="2026-07-23T10:00:00Z")
+            core.sessions[s1.id] = s1
+
+            s2 = await svc.start_session(owner_sub="alice", seed_idea="newest")
+            s2 = replace(s2, created_at="2026-07-25T15:00:00Z")
+            core.sessions[s2.id] = s2
+
+            s3 = await svc.start_session(owner_sub="alice", seed_idea="oldest")
+            s3 = replace(s3, created_at="2026-07-20T09:00:00Z")
+            core.sessions[s3.id] = s3
+
+            # Another founder's session should not appear
+            other = await svc.start_session(owner_sub="bob", seed_idea="bob's idea")
+            other = replace(other, created_at="2026-07-26T20:00:00Z")
+            core.sessions[other.id] = other
+
+            return await svc.list_sessions(owner_sub="alice")
+
+        sessions = asyncio.run(scenario())
+        # Alice's sessions in most-recent-first order
+        assert len(sessions) == 3
+        assert sessions[0].created_at == "2026-07-25T15:00:00Z"
+        assert sessions[1].created_at == "2026-07-23T10:00:00Z"
+        assert sessions[2].created_at == "2026-07-20T09:00:00Z"
+        # Bob's session did not appear
+        assert all(s.owner_sub == "alice" for s in sessions)
+
+    def test_list_sessions_handles_sessions_without_created_at(self) -> None:
+        core = FakeCore()
+        svc = _service(core)
+
+        async def scenario() -> list[Session]:
+            # Sessions without created_at (empty string sorts to the end)
+            s1 = await svc.start_session(owner_sub="alice", seed_idea="idea1")
+            s1 = replace(s1, created_at=None)
+            core.sessions[s1.id] = s1
+
+            s2 = await svc.start_session(owner_sub="alice", seed_idea="idea2")
+            s2 = replace(s2, created_at="2026-07-25T10:00:00Z")
+            core.sessions[s2.id] = s2
+
+            return await svc.list_sessions(owner_sub="alice")
+
+        sessions = asyncio.run(scenario())
+        assert len(sessions) == 2
+        # Session with created_at sorts first (most recent)
+        assert sessions[0].created_at == "2026-07-25T10:00:00Z"
+        # Session without created_at sorts last
+        assert sessions[1].created_at is None
 
 
 class TestExtractReport:

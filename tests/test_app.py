@@ -66,6 +66,9 @@ class FakeCore:
         s = self.sessions.get(session_id)
         return s if s is not None and s.owner_sub == owner_sub else None
 
+    async def list_sessions(self, *, owner_sub) -> list[Session]:
+        return [s for s in self.sessions.values() if s.owner_sub == owner_sub]
+
     async def set_turn_count(self, *, session_id, turn_count) -> None:
         self.sessions[session_id] = replace(self.sessions[session_id], turn_count=turn_count)
 
