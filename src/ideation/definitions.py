@@ -87,8 +87,11 @@ class Scorecard(BaseModel):
         whole report on a validation error the founder can do nothing about."""
         if isinstance(value, dict):
             verdict = value.get("build") or value.get("recommendation") or value.get("verdict")
-            prose = value.get("text") or value.get("rationale") or value.get("why") or value.get(
-                "summary"
+            prose = (
+                value.get("text")
+                or value.get("rationale")
+                or value.get("why")
+                or value.get("summary")
             )
             if verdict and prose:
                 return f"{str(verdict).strip().capitalize()} — {str(prose).strip()}"
