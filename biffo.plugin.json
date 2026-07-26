@@ -195,9 +195,116 @@
           "system:ideation"
         ]
       }
+    },
+    {
+      "name": "ideation_model_catalog",
+      "columns": [
+        {
+          "name": "model_id",
+          "type": "String(200)",
+          "nullable": false,
+          "description": "An OpenRouter model id (e.g. 'deepseek/deepseek-v4-flash'). Not validated server-side against OpenRouter's own catalog — the admin UI is expected to check that at entry time."
+        },
+        {
+          "name": "label",
+          "type": "String(200)",
+          "nullable": false,
+          "description": "Short human label shown in the admin UI's model picker."
+        },
+        {
+          "name": "active",
+          "type": "Boolean",
+          "nullable": true,
+          "description": "Whether this model is offered as a choice today. Nullable because the generated migration DDL does not apply declared defaults (only the in-process model, per the plugin-template README's 'Known limitations') — treat NULL as false; every create request must set it explicitly."
+        },
+        {
+          "name": "is_default",
+          "type": "Boolean",
+          "nullable": true,
+          "description": "The default model a new agent is created with. Exactly one row should have this true at a time — enforced by the admin UI, not the database (this table has no custom application code to enforce it server-side)."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ideation_model_catalog_tenant_model",
+          "columns": [
+            "tenant_id",
+            "model_id"
+          ],
+          "unique": true
+        }
+      ],
+      "permissions": {
+        "list": {
+          "allowed": true,
+          "required_role": [
+            "admin"
+          ]
+        },
+        "read": {
+          "allowed": true,
+          "required_role": [
+            "admin"
+          ]
+        },
+        "create": {
+          "allowed": true,
+          "required_role": [
+            "admin"
+          ]
+        },
+        "update": {
+          "allowed": true,
+          "required_role": [
+            "admin"
+          ]
+        },
+        "delete": {
+          "allowed": true,
+          "required_role": [
+            "admin"
+          ]
+        }
+      }
     }
   ],
-  "api_routes": [],
+  "api_routes": [
+    {
+      "method": "GET",
+      "path": "/model-catalog",
+      "table": "ideation_model_catalog",
+      "operation": "list",
+      "description": "List the admin-managed catalog of OpenRouter models available to agents."
+    },
+    {
+      "method": "POST",
+      "path": "/model-catalog",
+      "table": "ideation_model_catalog",
+      "operation": "create",
+      "description": "Add a model to the catalog."
+    },
+    {
+      "method": "GET",
+      "path": "/model-catalog/{id}",
+      "table": "ideation_model_catalog",
+      "operation": "read",
+      "description": "Get a single catalog entry."
+    },
+    {
+      "method": "PUT",
+      "path": "/model-catalog/{id}",
+      "table": "ideation_model_catalog",
+      "operation": "update",
+      "description": "Update a catalog entry (e.g. toggle active, change label, set as default)."
+    },
+    {
+      "method": "DELETE",
+      "path": "/model-catalog/{id}",
+      "table": "ideation_model_catalog",
+      "operation": "delete",
+      "description": "Remove a model from the catalog."
+    }
+  ],
   "event_subscriptions": [],
   "ui_components": [],
   "dependencies": {

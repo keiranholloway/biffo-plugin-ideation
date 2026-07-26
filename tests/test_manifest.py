@@ -69,10 +69,19 @@ def test_capability_pins_are_ranges_not_bare_versions() -> None:
         assert pin[0] in "^>", f"{capability} pin {pin!r} must be a range"
 
 
-def test_all_tables_stay_crud_closed() -> None:
-    # Data lives in Core, served only over the owner-scoped service seam — never
-    # tenant-scoped generic CRUD (ADR-0002 / ADR-0004 / ADR-0017 seam #5).
+# Founder-owned data (session/report rows) stays owner-scoped and CRUD-closed
+# (ADR-0002 / ADR-0004 / ADR-0017 seam #5) — a founder's private data must never
+# be reachable via tenant-wide generic CRUD. Admin-managed reference data (the
+# model catalog) is the deliberate exception: it isn't owned by any one founder,
+# so it uses Core's plugin-declared generic CRUD (ADR-0004), gated to the admin
+# role instead of owner-scoped. See test_admin_managed_tables_require_the_admin_role.
+_OWNER_SCOPED_TABLES = frozenset({"ideation_sessions", "ideation_reports"})
+
+
+def test_owner_scoped_tables_stay_crud_closed() -> None:
     for table in _manifest()["tables"]:
+        if table["name"] not in _OWNER_SCOPED_TABLES:
+            continue
         perms = table["permissions"]
         assert all(
             not perms[action]["allowed"]
@@ -80,16 +89,50 @@ def test_all_tables_stay_crud_closed() -> None:
         ), f"{table['name']} must keep all CRUD permissions closed"
 
 
-def test_every_table_is_owner_scoped_on_a_real_column() -> None:
-    # Each table opts into service-auth owner-scoped access (ADR-0017 §5) on a
-    # column it actually declares, granted to this module's own principal.
+def test_every_owner_scoped_table_is_owner_scoped_on_a_real_column() -> None:
+    # Each owner-scoped table opts into service-auth owner-scoped access
+    # (ADR-0017 §5) on a column it actually declares, granted to this module's
+    # own principal.
     for table in _manifest()["tables"]:
+        if table["name"] not in _OWNER_SCOPED_TABLES:
+            continue
         access = table["owner_scoped_service"]
         assert access["allowed_principals"] == ["system:ideation"]
         column_names = {c["name"] for c in table["columns"]}
         assert access["owner_column"] in column_names, (
             f"{table['name']} owner_column must be a declared column"
         )
+
+
+def test_admin_managed_tables_require_the_admin_role() -> None:
+    # The model catalog is deliberately NOT owner-scoped (it isn't founder-owned
+    # data) — it uses tenant-wide generic CRUD, gated to the admin role on every
+    # operation, so it never accidentally opens to any authenticated caller.
+    for table in _manifest()["tables"]:
+        if table["name"] in _OWNER_SCOPED_TABLES:
+            continue
+        assert "owner_scoped_service" not in table, (
+            f"{table['name']} is admin-managed, not owner-scoped — should not "
+            "declare owner_scoped_service"
+        )
+        perms = table["permissions"]
+        for action in ("list", "read", "create", "update", "delete"):
+            assert perms[action]["allowed"] is True, (
+                f"{table['name']}.{action} should be open (admin-gated), not closed"
+            )
+            assert perms[action]["required_role"] == ["admin"], (
+                f"{table['name']}.{action} must require the admin role"
+            )
+
+
+def test_admin_managed_tables_have_matching_api_routes() -> None:
+    # Every admin-managed table's generic CRUD is actually reachable — a
+    # permissions block with no api_routes entry would be exposed nowhere.
+    admin_tables = {
+        t["name"] for t in _manifest()["tables"] if t["name"] not in _OWNER_SCOPED_TABLES
+    }
+    routed_tables = {r["table"] for r in _manifest()["api_routes"]}
+    assert admin_tables <= routed_tables
 
 
 def test_declares_a_founder_gated_user_ingress_pointing_at_the_asgi_app() -> None:
