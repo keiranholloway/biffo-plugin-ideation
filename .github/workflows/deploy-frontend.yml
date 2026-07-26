@@ -72,7 +72,7 @@ permissions:
 jobs:
   deploy-frontend:
     name: Build & sync the Ideation SPA
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
