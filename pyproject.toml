@@ -25,7 +25,7 @@ build-backend = "hatchling.build"
 packages = ["src/ideation"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "scripts"]
+pythonpath = ["src", "."]
 
 # Match the platform's Ruff standard (Biffo core pyproject) so this plugin lints
 # clean when vendored into an instance — the instance enforces this select over
