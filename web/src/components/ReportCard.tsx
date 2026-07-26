@@ -66,7 +66,7 @@ function Axis({ label, axis, icon }: { label: string; axis: { score: number; rat
 function PrdList({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null
   return (
-    <div>
+    <div className="ide-report-block">
       <strong>{label}:</strong>
       <ul>
         {items.map((it, i) => (
@@ -89,11 +89,11 @@ export function ReportCard({ report }: { report: Report }) {
         <Axis label="Economic moat" axis={scorecard.economic_moat} icon={<EconomicMoatIcon />} />
         <Axis label="Market fit" axis={scorecard.market_fit} icon={<MarketFitIcon />} />
       </div>
-      <p>
+      <div className="ide-report-block">
         <strong>Build vs buy:</strong> {scorecard.build_vs_buy}
-      </p>
+      </div>
       {scorecard.competitors.length > 0 && (
-        <>
+        <div className="ide-report-block">
           <h3>Competitors</h3>
           <ul>
             {scorecard.competitors.map((c, i) => (
@@ -103,13 +103,13 @@ export function ReportCard({ report }: { report: Report }) {
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
 
       <h2>High-level PRD</h2>
-      <p>
+      <div className="ide-report-block">
         <strong>Problem:</strong> {prd.problem}
-      </p>
+      </div>
       <PrdList label="Target users" items={prd.target_users} />
       <PrdList label="Workflows" items={prd.workflows} />
       <PrdList label="Data entities" items={prd.data_entities} />

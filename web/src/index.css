@@ -50,4 +50,7 @@ button:disabled { background: #b7b7c9; cursor: not-allowed; }
 .ide-score--good { background: #d1fae5; color: #065f46; }
 .ide-score--mid { background: #fef3c7; color: #92400e; }
 .ide-score--weak { background: #fee2e2; color: #991b1b; }
+.ide-report-block { border: 1px solid #eee; border-radius: 8px; padding: .7rem .9rem; margin: .75rem 0; }
+.ide-report-block ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+.ide-report h3 { margin: 0 0 .3rem; }
 @media (max-width: 560px) { .ide-axes { grid-template-columns: 1fr; } }
