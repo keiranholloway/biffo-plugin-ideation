@@ -43,13 +43,13 @@ describe('Sidebar', () => {
     expect(onSelect).toHaveBeenCalledWith(sessions[0])
   })
 
-  it('calls onNewIdea when clicking the + New idea button', () => {
+  it('calls onNewIdea when clicking the Ideate button', () => {
     const onSelect = vi.fn()
     const onNewIdea = vi.fn()
 
     render(<Sidebar sessions={[]} activeId={null} onSelect={onSelect} onNewIdea={onNewIdea} />)
 
-    screen.getByText('+ New idea').click()
+    screen.getByText('Ideate').click()
     expect(onNewIdea).toHaveBeenCalled()
   })
 
