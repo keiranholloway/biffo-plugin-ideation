@@ -8,6 +8,7 @@ covered elsewhere (the SDK); this tests routing, auth-gating, and status-codes.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -293,3 +294,33 @@ def test_exposes_an_asgi_app_not_a_lambda_handler() -> None:
 
     assert isinstance(app_module.app, FastAPI)
     assert not hasattr(app_module, "handler")
+
+
+class TestResolveStaticDir:
+    """The deployed Lambda flattens src/ into its own task root, one directory
+    shallower than this source checkout — a single fixed relative-parent count
+    can't resolve both shapes (the bug this pins: web-admin/dist was never
+    found in production because the old fixed computation pointed outside the
+    deployed package entirely)."""
+
+    def test_uses_plugins_root_when_set(self) -> None:
+        from ideation.admin_app import _resolve_static_dir
+
+        result = _resolve_static_dir("/var/task/services")
+        assert result == Path("/var/task/services/ideation/web-admin/dist")
+
+    def test_falls_back_to_source_relative_path_when_unset(self) -> None:
+        from ideation.admin_app import _resolve_static_dir
+
+        result = _resolve_static_dir(None)
+        # <repo-root>/src/ideation/admin_app.py -> <repo-root>/web-admin/dist
+        assert result.name == "dist"
+        assert result.parent.name == "web-admin"
+        assert (result.parent.parent / "src" / "ideation" / "admin_app.py").is_file()
+
+    def test_falls_back_when_plugins_root_is_empty_string(self) -> None:
+        from ideation.admin_app import _resolve_static_dir
+
+        result = _resolve_static_dir("")
+        assert result.name == "dist"
+        assert "var/task" not in str(result)

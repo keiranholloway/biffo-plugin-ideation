@@ -137,9 +137,33 @@ async def identity() -> dict[str, str]:
     }
 
 
-# ── static admin UI (once built — a later milestone; mount conditionally so ──
-# ── this app works before that UI exists, e.g. in this milestone's own tests) ─
+# ── static admin UI (mount conditionally so this app works before the UI is ──
+# ── built, e.g. in this milestone's own tests) ────────────────────────────────
 
-_STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "web-admin" / "dist"
+
+def _resolve_static_dir(plugins_root: str | None) -> Path:
+    """Where the built web-admin/dist actually lands, in either context.
+
+    The deployed plugin-host Lambda flattens this package's src/ into its own
+    task root (biffo-platform's deploy-app.yml "Package and deploy the shared
+    plugin host" step: `cp -r "$plugin_dir"/src/. "$pkg/"`), so this file ends
+    up at <task-root>/ideation/admin_app.py — one directory shallower than in
+    this source checkout (<repo>/src/ideation/admin_app.py). A single fixed
+    relative parent count can't resolve correctly in both shapes.
+    ``BIFFO_PLUGINS_ROOT`` (already set on the Lambda for
+    discover_plugins()'s own manifest scan) is the deployed anchor instead:
+    the same deploy step copies this plugin's built web-admin/dist to
+    services/ideation/web-admin/dist alongside the manifest, so
+    ``BIFFO_PLUGINS_ROOT/ideation/web-admin/dist`` is where it actually
+    lands. Falls back to the source-repo-relative path (this file's own
+    location) when the env var isn't set, e.g. local dev or this app's own
+    tests.
+    """
+    if plugins_root:
+        return Path(plugins_root) / "ideation" / "web-admin" / "dist"
+    return Path(__file__).resolve().parent.parent.parent / "web-admin" / "dist"
+
+
+_STATIC_DIR = _resolve_static_dir(os.environ.get("BIFFO_PLUGINS_ROOT"))
 if _STATIC_DIR.is_dir():
     app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="admin-ui")
