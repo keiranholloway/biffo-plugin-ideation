@@ -158,6 +158,11 @@ class FakeCore:
     async def get_report(self, *, session_id: str) -> dict[str, Any] | None:
         return self.reports.get(session_id)
 
+    async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
+        """Returns a submitted idea or None if not found."""
+        # For testing, can be populated by the test
+        return getattr(self, "_submitted_idea", None)
+
 
 def _service(core: FakeCore, **kw: Any) -> IdeationService:
     return IdeationService(core, chat_model="chat/m", analysis_model="analysis/m", **kw)
@@ -484,3 +489,22 @@ class TestExtractReport:
         bad["scorecard"]["viability"]["score"] = 99  # out of 1–5
         with pytest.raises(MalformedReportError):
             extract_report(_analysis_run(bad))
+
+
+class TestSubmittedIdea:
+    def test_get_submitted_idea_returns_the_idea(self) -> None:
+        core = FakeCore()
+        core._submitted_idea = "build a coaching app"
+        svc = _service(core)
+
+        idea = asyncio.run(svc.get_submitted_idea(owner_sub="u"))
+
+        assert idea == "build a coaching app"
+
+    def test_get_submitted_idea_returns_none_if_not_submitted(self) -> None:
+        core = FakeCore()
+        svc = _service(core)
+
+        idea = asyncio.run(svc.get_submitted_idea(owner_sub="u"))
+
+        assert idea is None

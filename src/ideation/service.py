@@ -131,6 +131,11 @@ class IdeationService:
         sessions = await self._core.list_sessions(owner_sub=owner_sub)
         return sorted(sessions, key=lambda s: s.created_at or "", reverse=True)
 
+    async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
+        """The founder's own early-access idea submission, if any — used to prefill
+        the seed-idea textbox. ``None`` if they never submitted one via sign-up."""
+        return await self._core.get_submitted_idea(owner_sub=owner_sub)
+
     async def chat_turn(self, *, owner_sub: str, session_id: str, user_message: str) -> TurnResult:
         """Run one buffered challenger turn and return the reply.
 

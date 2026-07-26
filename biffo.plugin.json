@@ -17,7 +17,8 @@
     "run-output-tool": "^1",
     "thread-messages-read": "^1",
     "owner-scoped-tables": "^1",
-    "chat-agent-registry": "^1"
+    "chat-agent-registry": "^1",
+    "idea-submission-read": "^1"
   },
   "user_ingress": {
     "required_group": "founder",
