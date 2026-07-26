@@ -181,13 +181,28 @@ export default function App() {
     }
   }
 
+  async function handleDeleteSession(clicked: SessionSummary) {
+    if (!api) return
+    if (!window.confirm(`Delete "${clicked.title}"? This can't be undone from here.`)) return
+    try {
+      await api.deleteSession(clicked.session_id)
+      const activeId = view.kind === 'live' || view.kind === 'report' ? view.sessionId : null
+      if (activeId === clicked.session_id) {
+        handleNewIdea()
+      }
+      await refreshSessions()
+    } catch (e) {
+      setError(errorText(e))
+    }
+  }
+
   if (!ready) return <main className="ide">Loading…</main>
 
   const activeSessionId = view.kind === 'live' || view.kind === 'report' ? view.sessionId : null
 
   return (
     <div className="ide-layout">
-      <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} />
+      <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} onDelete={handleDeleteSession} />
       <main className="ide">
         <h1>Ideation Engine</h1>
         {error && <div className="ide-error">{error}</div>}

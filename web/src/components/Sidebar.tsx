@@ -5,9 +5,10 @@ export interface SidebarProps {
   activeId: string | null
   onSelect: (session: SessionSummary) => void
   onNewIdea: () => void
+  onDelete: (session: SessionSummary) => void
 }
 
-export function Sidebar({ sessions, activeId, onSelect, onNewIdea }: SidebarProps) {
+export function Sidebar({ sessions, activeId, onSelect, onNewIdea, onDelete }: SidebarProps) {
   return (
     <nav className="ide-sidebar">
       <div className="ide-sidebar-header">
@@ -21,7 +22,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNewIdea }: SidebarProp
       ) : (
         <ul className="ide-sidebar-list">
           {sessions.map((session) => (
-            <li key={session.session_id}>
+            <li key={session.session_id} className="ide-sidebar-row">
               <button
                 className={`ide-sidebar-item ${activeId === session.session_id ? 'ide-sidebar-item--active' : ''}`}
                 onClick={() => onSelect(session)}
@@ -35,6 +36,17 @@ export function Sidebar({ sessions, activeId, onSelect, onNewIdea }: SidebarProp
                     {session.status}
                   </span>
                 </div>
+              </button>
+              <button
+                type="button"
+                className="ide-sidebar-delete"
+                aria-label="Delete this idea"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(session)
+                }}
+              >
+                ×
               </button>
             </li>
           ))}
