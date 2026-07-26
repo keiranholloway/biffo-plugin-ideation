@@ -273,3 +273,26 @@ def test_get_report_none_when_empty():
     t.on("GET", _REPORTS, [])
     gw = CoreHttpGateway(t)
     assert _run(gw.get_report(session_id="sess-1")) is None
+
+
+# ── submitted idea ──────────────────────────────────────────────────────────
+
+
+def test_get_submitted_idea_returns_the_idea():
+    t = FakeTransport()
+    t.on("GET", "/api/v1/internal/idea-submissions/mine", {"idea": "build a coaching app"})
+    gw = CoreHttpGateway(t)
+
+    idea = _run(gw.get_submitted_idea(owner_sub="alice"))
+
+    assert idea == "build a coaching app"
+
+
+def test_get_submitted_idea_maps_404_to_none():
+    t = FakeTransport()
+    t.on("GET", "/api/v1/internal/idea-submissions/mine", CoreNotFoundError())
+    gw = CoreHttpGateway(t)
+
+    idea = _run(gw.get_submitted_idea(owner_sub="alice"))
+
+    assert idea is None

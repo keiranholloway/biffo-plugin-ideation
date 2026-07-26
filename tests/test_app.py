@@ -99,6 +99,9 @@ class FakeCore:
     async def get_report(self, *, session_id) -> dict[str, Any] | None:
         return self.reports.get(session_id)
 
+    async def get_submitted_idea(self, *, owner_sub) -> str | None:
+        return getattr(self, "_submitted_idea", None)
+
     # test helper
     def complete_analysis(self, tool_call: dict[str, Any]) -> None:
         self.runs["run-1"] = Run(
@@ -311,3 +314,19 @@ def test_list_sessions_response_shape(client):
     summary = summaries[0]
     # Should have exactly these keys: session_id, title, status, created_at
     assert set(summary.keys()) == {"session_id", "title", "status", "created_at"}
+
+
+def test_get_submitted_idea_returns_the_idea(client, core):
+    core._submitted_idea = "build a coaching app"
+
+    resp = client.get("/submitted-idea")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"idea": "build a coaching app"}
+
+
+def test_get_submitted_idea_returns_null_when_not_submitted(client, core):
+    resp = client.get("/submitted-idea")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"idea": None}

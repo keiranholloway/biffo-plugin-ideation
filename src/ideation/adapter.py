@@ -33,6 +33,7 @@ _SESSIONS = f"{_ROOT}/owner-data/ideation_sessions"
 _REPORTS = f"{_ROOT}/owner-data/ideation_reports"
 _AGENT_CHAT = f"{_ROOT}/agent-chat"
 _AGENT_RUNS = f"{_ROOT}/agent-runs"
+_IDEA_SUBMISSIONS = f"{_ROOT}/idea-submissions/mine"
 
 
 class CoreHttpError(Exception):
@@ -224,3 +225,10 @@ class CoreHttpGateway:
             "scorecard": _load_json_column(row.get("scorecard")),
             "model": row.get("model"),
         }
+
+    async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
+        try:
+            row = await self._t.request("GET", _IDEA_SUBMISSIONS)
+        except CoreNotFoundError:
+            return None
+        return row["idea"]

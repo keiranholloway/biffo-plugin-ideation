@@ -96,6 +96,17 @@ async def list_sessions(
     return [_summary(s) for s in sessions]
 
 
+@app.get("/submitted-idea")
+async def get_submitted_idea(
+    founder: ForwardedUser = Depends(require_founder),
+    svc: IdeationService = Depends(get_service),
+) -> dict:
+    """The founder's own early-access idea submission, if any — for the
+    seed-idea prefill affordance. ``idea`` is null if they never submitted one."""
+    idea = await svc.get_submitted_idea(owner_sub=founder.sub)
+    return {"idea": idea}
+
+
 def _derive_title(seed_idea: str, *, max_len: int = 60) -> str:
     """A display title from the seed idea when none was explicitly set: trim to
     ~max_len chars at a word boundary, with an ellipsis if truncated."""
