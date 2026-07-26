@@ -251,7 +251,6 @@ class TestIdentityRoute:
 
     def test_identity_route_returns_cognito_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The /identity route requires no auth and returns pool/client/region."""
-        import os
 
         monkeypatch.setenv("BIFFO_COGNITO_USER_POOL_ID", "us-east-1_test123")
         monkeypatch.setenv("BIFFO_COGNITO_CLIENT_ID", "test-client-456")
@@ -269,9 +268,7 @@ class TestIdentityRoute:
         assert data["clientId"] == "test-client-456"
         assert data["region"] == "us-east-1"
 
-    def test_identity_route_handles_missing_env_vars(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_identity_route_handles_missing_env_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When env vars are missing, /identity returns empty strings (no crash)."""
         monkeypatch.delenv("BIFFO_COGNITO_USER_POOL_ID", raising=False)
         monkeypatch.delenv("BIFFO_COGNITO_CLIENT_ID", raising=False)
