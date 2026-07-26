@@ -318,3 +318,30 @@ def test_get_submitted_idea_maps_404_to_none():
     idea = _run(gw.get_submitted_idea(owner_sub="alice"))
 
     assert idea is None
+
+
+# ── own config (live, admin-editable role config) ────────────────────────────
+
+
+def test_get_own_config_returns_the_row():
+    t = FakeTransport()
+    t.on(
+        "GET",
+        "/api/v1/internal/plugins/me/config/analyst",
+        {"system_prompt": "Analyze rigorously.", "model": "some/model"},
+    )
+    gw = CoreHttpGateway(t)
+
+    config = _run(gw.get_own_config(role="analyst"))
+
+    assert config == {"system_prompt": "Analyze rigorously.", "model": "some/model"}
+
+
+def test_get_own_config_maps_404_to_none():
+    t = FakeTransport()
+    t.on("GET", "/api/v1/internal/plugins/me/config/analyst", CoreNotFoundError())
+    gw = CoreHttpGateway(t)
+
+    config = _run(gw.get_own_config(role="analyst"))
+
+    assert config is None

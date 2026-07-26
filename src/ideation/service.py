@@ -168,18 +168,32 @@ class IdeationService:
         """Kick the async analysis run over the whole conversation and move the
         session to ``analysing``. Returns the run id the caller can poll on. Core
         assembles the analyst's context from the thread — the seed idea is already
-        its first turn — so nothing is re-passed here."""
+        its first turn — so nothing is re-passed here.
+
+        The analyst's prompt/model are read live from the admin-configured
+        "analyst" role (ADR-0009 internal plugin-config read) when one exists,
+        falling back to the built-in default otherwise — e.g. before an admin or
+        the seed script has ever set one. Unlike the challenger (resolved
+        server-side by Core's chat-agent registry), the analyst sends its whole
+        definition inline on every call, so this plugin's own code is what has
+        to look the live config up."""
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         if session.status != GATHERING:
             raise NotGatheringError(session.status)
         if session.turn_count < self._min_turns:
             raise NotEnoughTurnsError(session.turn_count)
 
+        analyst_config = await self._core.get_own_config(role="analyst")
+        model = analyst_config["model"] if analyst_config else self._analysis_model
+        definition_kwargs: dict[str, Any] = {"model": model}
+        if analyst_config:
+            definition_kwargs["instructions"] = analyst_config["system_prompt"]
+
         run_id = await self._core.request_analysis(
             thread_id=session.thread_id,
             owner_sub=owner_sub,
             agent_name=ANALYST_AGENT_NAME,
-            definition=analyst_definition(model=self._analysis_model),
+            definition=analyst_definition(**definition_kwargs),
             output_tool=report_tool_schema(),
         )
         await self._core.set_status(session_id=session_id, status=ANALYSING, analysis_run_id=run_id)

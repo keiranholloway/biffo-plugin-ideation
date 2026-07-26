@@ -49,6 +49,7 @@ class FakeCore:
         self._seq = 0
         self._reply = 0
         self._submitted_idea: str | None = None
+        self._own_config: dict[str, dict[str, Any]] = {}
 
     async def create_session(self, *, owner_sub, seed_idea, thread_id) -> Session:
         self._seq += 1
@@ -105,6 +106,9 @@ class FakeCore:
 
     async def get_submitted_idea(self, *, owner_sub) -> str | None:
         return getattr(self, "_submitted_idea", None)
+
+    async def get_own_config(self, *, role) -> dict[str, Any] | None:
+        return self._own_config.get(role)
 
     # test helper
     def complete_analysis(self, tool_call: dict[str, Any]) -> None:
