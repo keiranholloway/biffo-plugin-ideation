@@ -203,6 +203,7 @@
   "dependencies": {
     "biffo-plugin-sdk": "^1.1"
   },
+  "chat_agents_dynamic": true,
   "chat_agents": [
     {
       "key": "ideation-challenger",

@@ -107,3 +107,9 @@ def test_declares_a_founder_gated_user_frontend() -> None:
     frontend = _manifest()["user_frontend"]
     assert frontend["required_group"] == "founder"
     assert frontend["dir"]  # the built static export directory
+
+
+def test_opts_into_live_chat_agent_registry() -> None:
+    # The manifest declares chat_agents_dynamic: true to use Core's live,
+    # DB-backed chat-agent registry instead of the frozen-at-deploy static one.
+    assert _manifest()["chat_agents_dynamic"] is True
