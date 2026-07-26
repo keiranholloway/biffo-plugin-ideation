@@ -104,6 +104,19 @@ def test_every_owner_scoped_table_is_owner_scoped_on_a_real_column() -> None:
         )
 
 
+def test_ideation_sessions_declares_the_challenger_agent_key_column() -> None:
+    # The founder-facing agent picker (M10) pins this on the session at
+    # creation — must be a real declared column, not just app-layer state.
+    for table in _manifest()["tables"]:
+        if table["name"] != "ideation_sessions":
+            continue
+        column_names = {c["name"] for c in table["columns"]}
+        assert "challenger_agent_key" in column_names
+        break
+    else:
+        raise AssertionError("ideation_sessions table not found in manifest")
+
+
 def test_admin_managed_tables_require_the_admin_role() -> None:
     # The model catalog is deliberately NOT owner-scoped (it isn't founder-owned
     # data) — it uses tenant-wide generic CRUD, gated to the admin role on every

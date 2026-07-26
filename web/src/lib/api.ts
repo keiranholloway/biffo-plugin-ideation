@@ -77,6 +77,11 @@ export interface SessionSummary {
   created_at: string
 }
 
+export interface Agent {
+  agent_key: string
+  agent_name: string
+}
+
 export type Api = ReturnType<typeof createApi>
 
 export function createApi(getIdToken: () => string | null) {
@@ -103,8 +108,11 @@ export function createApi(getIdToken: () => string | null) {
   }
 
   return {
-    startSession: (seed_idea: string) =>
-      request<TurnResponse>('POST', '/sessions', { seed_idea }),
+    startSession: (seed_idea: string, challenger_agent_key?: string | null) =>
+      request<TurnResponse>('POST', '/sessions', {
+        seed_idea,
+        ...(challenger_agent_key != null ? { challenger_agent_key } : {}),
+      }),
     sendMessage: (id: string, message: string) =>
       request<TurnResponse>('POST', `/sessions/${id}/messages`, { message }),
     getSession: (id: string) => request<SessionState>('GET', `/sessions/${id}`),
@@ -114,5 +122,6 @@ export function createApi(getIdToken: () => string | null) {
     getReport: (id: string) => request<ReportResponse>('GET', `/sessions/${id}/report`),
     listSessions: () => request<SessionSummary[]>('GET', '/sessions'),
     getSubmittedIdea: () => request<{ idea: string | null }>('GET', '/submitted-idea'),
+    getAgents: () => request<Agent[]>('GET', '/agents'),
   }
 }

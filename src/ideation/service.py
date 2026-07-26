@@ -103,16 +103,30 @@ class IdeationService:
         self._min_turns = min_turns
         self._max_turns = max_turns
 
-    async def start_session(self, *, owner_sub: str, seed_idea: str) -> Session:
+    async def start_session(
+        self, *, owner_sub: str, seed_idea: str, challenger_agent_key: str | None = None
+    ) -> Session:
         """Open a session for a founder's idea, in the gathering phase, with a
         fresh run thread to carry the conversation. The idea itself is not put in
         the challenger's system prompt — it is untrusted, and enters the thread as
-        the first fenced user turn (the caller's first :meth:`chat_turn`)."""
+        the first fenced user turn (the caller's first :meth:`chat_turn`).
+
+        ``challenger_agent_key`` is pinned on the session at creation (not
+        re-resolved later) — an admin editing or deactivating an agent must
+        never change the behavior of a session already in flight. Defaults to
+        the built-in seed challenger for a founder who didn't pick one."""
         return await self._core.create_session(
             owner_sub=owner_sub,
             seed_idea=seed_idea.strip(),
             thread_id=str(uuid.uuid4()),
+            challenger_agent_key=challenger_agent_key or CHALLENGER_AGENT_NAME,
         )
+
+    async def list_active_challengers(self) -> list[dict[str, Any]]:
+        """The active challenger roster for a founder's seed-view picker —
+        agent_key/agent_name only, never system_prompt (ADR-0016 §1)."""
+        rows = await self._core.list_active_agents(role="challenger")
+        return [{"agent_key": r["agent_key"], "agent_name": r["agent_name"]} for r in rows]
 
     async def _load_owned(self, *, owner_sub: str, session_id: str) -> Session:
         session = await self._core.get_session(owner_sub=owner_sub, session_id=session_id)
@@ -142,10 +156,18 @@ class IdeationService:
         """Run one buffered challenger turn and return the reply.
 
         The plugin only decides *whether* the turn may run (gathering, under the
-        cap) and *with what* prompt (the challenger instructions) — it hands Core
-        the founder's raw message and lets the trusted spine fence it, assemble the
-        context, invoke the runtime, and persist the turn (ADR-0016 §7). Then it
-        advances the turn counter.
+        cap) and *which agent* drives it (the session's own pinned
+        ``challenger_agent_key`` — chosen by the founder at session start, or
+        the built-in default) — it hands Core the founder's raw message and
+        lets the trusted spine fence it, assemble the context, invoke the
+        runtime, and persist the turn (ADR-0016 §7). Then it advances the turn
+        counter.
+
+        ``system_prompt`` is still passed for port-signature parity with the
+        analyst's inline-definition path, but Core's chat-turn spine resolves
+        the *actual* prompt server-side from ``agent_name`` (the registered/
+        live-configured agent), never from what's sent here (ADR-0016 §1) — see
+        adapter.py's ``run_chat_turn`` docstring.
         """
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         if session.status != GATHERING:
@@ -156,7 +178,7 @@ class IdeationService:
         result = await self._core.run_chat_turn(
             thread_id=session.thread_id,
             owner_sub=owner_sub,
-            agent_name=CHALLENGER_AGENT_NAME,
+            agent_name=session.challenger_agent_key,
             system_prompt=CHALLENGER_INSTRUCTIONS,
             user_text=user_message,
             model=self._chat_model,

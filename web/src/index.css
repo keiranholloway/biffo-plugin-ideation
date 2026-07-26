@@ -42,6 +42,8 @@ button:disabled { background: #b7b7c9; cursor: not-allowed; }
 .ide-finalise { background: #059669; }
 .ide-turns { font-size: .8rem; color: #667; }
 .ide-use-original { background: none; border: 1px solid #2563eb; color: #2563eb; margin-bottom: 1rem; width: 100%; }
+.ide-agent-picker { display: flex; flex-direction: column; gap: .3rem; font-size: .85rem; color: #445; margin: .75rem 0; }
+.ide-agent-picker select { font: inherit; padding: .5rem .6rem; border: 1px solid #cdd; border-radius: 8px; }
 .ide-analysing { color: #4338ca; font-weight: 600; }
 .ide-report { background: #fff; border: 1px solid #e3e3ee; border-top: 3px solid #2563eb; border-radius: 12px; padding: 1.25rem; margin-top: 1.5rem; }
 .ide-summary { font-size: 1.05rem; }

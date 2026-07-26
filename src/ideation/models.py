@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .definitions import CHALLENGER_AGENT_NAME
+
 # Session lifecycle.
 GATHERING = "gathering"  # the requirement-gathering chat is in progress
 ANALYSING = "analysing"  # finalised; the async analysis run is in flight
@@ -32,6 +34,11 @@ class Session:
     title: str | None = None
     created_at: str | None = None
     deleted: bool = False
+    #: Which challenger persona this session was started with — pinned at
+    #: creation so an admin editing/deactivating an agent never changes the
+    #: behavior of a session already in flight. Defaults to the built-in seed
+    #: challenger for a founder who didn't pick one from the active roster.
+    challenger_agent_key: str = CHALLENGER_AGENT_NAME
 
 
 @dataclass(frozen=True)

@@ -83,6 +83,12 @@
           "type": "Boolean",
           "nullable": false,
           "description": "Soft-delete flag. True means the founder deleted this session from their sidebar; the row is never destroyed (recoverable later), just excluded from list_sessions. Defaults false."
+        },
+        {
+          "name": "challenger_agent_key",
+          "type": "String(64)",
+          "nullable": true,
+          "description": "The challenger persona this session was pinned to at creation, chosen from the active roster (or the built-in default). Never re-resolved later, so an admin editing/deactivating an agent never changes a session already in flight. Nullable because the generated migration DDL does not apply declared defaults; rows created before this column existed fall back to the built-in seed challenger in the adapter."
         }
       ],
       "indexes": [

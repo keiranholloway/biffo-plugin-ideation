@@ -44,6 +44,7 @@ class FakeCore:
         self._seq = 0
         self._submitted_idea: str | None = None
         self._own_config: dict[str, dict[str, Any]] = {}
+        self._active_agents: dict[str, list[dict[str, Any]]] = {}
 
     # test helper: drive the async analysis run to a terminal state
     def resolve_run(
@@ -56,7 +57,9 @@ class FakeCore:
     ) -> None:
         self.runs[run_id] = Run(id=run_id, status=status, messages=messages or [], model=model)
 
-    async def create_session(self, *, owner_sub: str, seed_idea: str, thread_id: str) -> Session:
+    async def create_session(
+        self, *, owner_sub: str, seed_idea: str, thread_id: str, challenger_agent_key: str
+    ) -> Session:
         self._seq += 1
         session = Session(
             id=f"s{self._seq}",
@@ -65,6 +68,7 @@ class FakeCore:
             status=GATHERING,
             thread_id=thread_id,
             turn_count=0,
+            challenger_agent_key=challenger_agent_key,
         )
         self.sessions[session.id] = session
         return session
@@ -172,6 +176,10 @@ class FakeCore:
     async def get_own_config(self, *, role: str) -> dict[str, Any] | None:
         """Populated per-test via _own_config: {role: {system_prompt, model}}."""
         return self._own_config.get(role)
+
+    async def list_active_agents(self, *, role: str) -> list[dict[str, Any]]:
+        """Populated per-test via _active_agents: {role: [{agent_key, agent_name}, ...]}."""
+        return self._active_agents.get(role, [])
 
 
 def _service(core: FakeCore, **kw: Any) -> IdeationService:
