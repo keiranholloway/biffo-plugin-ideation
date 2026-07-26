@@ -6,6 +6,7 @@ sees this directory's own config). conftest.py files are collected
 unconditionally along the path to every test below them, so this runs first
 either way.
 """
+
 from __future__ import annotations
 
 import sys
