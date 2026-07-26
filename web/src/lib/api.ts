@@ -110,6 +110,7 @@ export function createApi(getIdToken: () => string | null) {
     getSession: (id: string) => request<SessionState>('GET', `/sessions/${id}`),
     finalise: (id: string) =>
       request<{ status: string; analysis_run_id: string }>('POST', `/sessions/${id}/finalise`),
+    deleteSession: (id: string) => request<void>('POST', `/sessions/${id}/delete`),
     getReport: (id: string) => request<ReportResponse>('GET', `/sessions/${id}/report`),
     listSessions: () => request<SessionSummary[]>('GET', '/sessions'),
     getSubmittedIdea: () => request<{ idea: string | null }>('GET', '/submitted-idea'),

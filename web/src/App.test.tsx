@@ -557,4 +557,199 @@ describe('App', () => {
       expect(screen.getByText('Generate review')).toBeInTheDocument()
     })
   })
+
+  it('deletes a session and refreshes the list when confirmed', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    const initialSessions = [
+      { session_id: 's1', title: 'First idea', status: 'complete' as const, created_at: '2026-07-25T10:00:00Z' },
+      { session_id: 's2', title: 'Second idea', status: 'gathering' as const, created_at: '2026-07-24T15:30:00Z' },
+    ]
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => initialSessions, text: async () => '' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/delete' && method === 'POST') {
+        return { ok: true, json: async () => ({}), text: async () => '' } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('First idea')).toBeInTheDocument()
+      expect(screen.getByText('Second idea')).toBeInTheDocument()
+    })
+
+    const deleteButtons = screen.getAllByLabelText('Delete this idea')
+    deleteButtons[0].click()
+
+    expect(window.confirm).toHaveBeenCalled()
+  })
+
+  it('cancels delete when user declines the confirm', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    const sessionList = [
+      { session_id: 's1', title: 'My idea', status: 'complete' as const, created_at: '2026-07-25T10:00:00Z' },
+    ]
+
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') {
+        return { ok: true, json: async () => sessionList, text: async () => '' } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('My idea')).toBeInTheDocument()
+    })
+
+    screen.getByLabelText('Delete this idea').click()
+
+    expect(window.confirm).toHaveBeenCalled()
+    // Verify delete endpoint was never called
+    expect(fetchSpy).not.toHaveBeenCalledWith(expect.stringContaining('/delete'), expect.anything())
+  })
+
+  it('resets to seed view when deleting the currently open session', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    const sessionList = [
+      { session_id: 's1', title: 'My idea', status: 'complete' as const, created_at: '2026-07-25T10:00:00Z' },
+    ]
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => sessionList, text: async () => '' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/report') {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'complete',
+            report: {
+              prd: {
+                problem: 'Test problem',
+                target_users: [],
+                workflows: [],
+                data_entities: [],
+                capabilities: [],
+                out_of_scope: [],
+              },
+              scorecard: {
+                viability: { score: 4, rationale: 'good' },
+                complexity: { score: 3, rationale: 'moderate' },
+                economic_moat: { score: 2, rationale: 'weak' },
+                market_fit: { score: 4, rationale: 'strong' },
+                build_vs_buy: 'Build',
+                competitors: [],
+                summary: 'Summary text',
+              },
+            },
+          }),
+          text: async () => '',
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/delete') {
+        return { ok: true, json: async () => ({}), text: async () => '' } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('My idea')).toBeInTheDocument()
+    })
+
+    // Click on the session to open its report
+    screen.getByText('My idea').click()
+
+    await waitFor(() => {
+      expect(screen.getByText('Viability scorecard')).toBeInTheDocument()
+    })
+
+    // Delete the open session
+    screen.getByLabelText('Delete this idea').click()
+
+    // Verify we're back at the seed form
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("e.g. a scheduling assistant for independent coaches…")).toBeInTheDocument()
+      expect(screen.queryByText('Viability scorecard')).not.toBeInTheDocument()
+    })
+  })
+
+  it('keeps the current view when deleting a different session', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    const sessionList = [
+      { session_id: 's1', title: 'Completed', status: 'complete' as const, created_at: '2026-07-25T10:00:00Z' },
+      { session_id: 's2', title: 'In progress', status: 'gathering' as const, created_at: '2026-07-24T15:30:00Z' },
+    ]
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => sessionList, text: async () => '' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s2') {
+        return {
+          ok: true,
+          json: async () => ({
+            session_id: 's2',
+            status: 'gathering',
+            turn_count: 1,
+            min_turns: 3,
+            max_turns: 5,
+            can_finalise: false,
+          }),
+          text: async () => '',
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/delete') {
+        return { ok: true, json: async () => ({}), text: async () => '' } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('In progress')).toBeInTheDocument()
+      expect(screen.getByText('Completed')).toBeInTheDocument()
+    })
+
+    // Click on the in-progress session to open it
+    screen.getByText('In progress').click()
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+    })
+
+    // Delete the completed session (different one)
+    const deleteButtons = screen.getAllByLabelText('Delete this idea')
+    deleteButtons[0].click() // First delete button is for 'Completed'
+
+    // Verify the live chat view is still visible
+    expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+  })
 })
