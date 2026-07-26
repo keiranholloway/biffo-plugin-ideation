@@ -195,6 +195,16 @@ async def finalise(
     return {"status": ANALYSING, "analysis_run_id": run_id}
 
 
+@app.post("/sessions/{session_id}/delete", status_code=204)
+async def delete_session(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: IdeationService = Depends(get_service),
+) -> None:
+    """Soft-delete a session — deletable regardless of status."""
+    await svc.delete_session(owner_sub=founder.sub, session_id=session_id)
+
+
 @app.get("/sessions/{session_id}/report")
 async def read_report(
     session_id: str,

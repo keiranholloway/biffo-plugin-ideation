@@ -90,6 +90,9 @@ class FakeCore:
             analysis_run_id=analysis_run_id or current.analysis_run_id,
         )
 
+    async def delete_session(self, *, session_id: str) -> None:
+        self.sessions[session_id] = replace(self.sessions[session_id], deleted=True)
+
     async def run_chat_turn(
         self,
         *,
@@ -473,6 +476,68 @@ class TestListSessions:
         assert sessions[0].created_at == "2026-07-25T10:00:00Z"
         # Session without created_at sorts last
         assert sessions[1].created_at is None
+
+
+class TestDeleteSession:
+    def test_delete_session_owned_by_founder_succeeds(self) -> None:
+        core = FakeCore()
+        svc = _service(core)
+
+        async def scenario() -> str:
+            s = await svc.start_session(owner_sub="alice", seed_idea="idea")
+            await svc.delete_session(owner_sub="alice", session_id=s.id)
+            return s.id
+
+        session_id = asyncio.run(scenario())
+        # Verify the session is marked as deleted
+        assert core.sessions[session_id].deleted is True
+
+    def test_delete_session_not_owned_raises_not_found(self) -> None:
+        core = FakeCore()
+        svc = _service(core)
+
+        async def scenario() -> None:
+            s = await svc.start_session(owner_sub="alice", seed_idea="idea")
+            await svc.delete_session(owner_sub="mallory", session_id=s.id)
+
+        with pytest.raises(SessionNotFoundError):
+            asyncio.run(scenario())
+
+    def test_delete_session_in_gathering_and_analysing_status(self) -> None:
+        core = FakeCore()
+        svc = _service(core, min_turns=1)
+
+        async def scenario() -> tuple[str, str]:
+            # Test deletion from gathering status
+            s1 = await svc.start_session(owner_sub="alice", seed_idea="idea1")
+            await svc.delete_session(owner_sub="alice", session_id=s1.id)
+
+            # Test deletion from analysing status
+            s2 = await svc.start_session(owner_sub="alice", seed_idea="idea2")
+            await svc.chat_turn(owner_sub="alice", session_id=s2.id, user_message="msg")
+            await svc.finalise(owner_sub="alice", session_id=s2.id)
+            await svc.delete_session(owner_sub="alice", session_id=s2.id)
+            return (s1.id, s2.id)
+
+        s1_id, s2_id = asyncio.run(scenario())
+        assert core.sessions[s1_id].deleted is True
+        assert core.sessions[s2_id].deleted is True
+
+    def test_list_sessions_excludes_deleted(self) -> None:
+        core = FakeCore()
+        svc = _service(core)
+
+        async def scenario() -> tuple[str, str, list[str]]:
+            s1 = await svc.start_session(owner_sub="alice", seed_idea="keep")
+            s2 = await svc.start_session(owner_sub="alice", seed_idea="delete")
+            await svc.delete_session(owner_sub="alice", session_id=s2.id)
+            sessions = await svc.list_sessions(owner_sub="alice")
+            return (s1.id, s2.id, [s.id for s in sessions])
+
+        s1_id, s2_id, session_ids = asyncio.run(scenario())
+        assert len(session_ids) == 1
+        assert s1_id in session_ids
+        assert s2_id not in session_ids
 
 
 class TestExtractReport:

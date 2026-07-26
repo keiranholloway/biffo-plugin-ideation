@@ -81,6 +81,7 @@ def _session_from_row(row: dict[str, Any]) -> Session:
         analysis_run_id=row.get("analysis_run_id"),
         title=row.get("title"),
         created_at=row.get("created_at"),
+        deleted=row.get("deleted") or False,
     )
 
 
@@ -126,6 +127,9 @@ class CoreHttpGateway:
         if analysis_run_id is not None:
             body["analysis_run_id"] = analysis_run_id
         await self._t.request("PATCH", f"{_SESSIONS}/{session_id}", json=body)
+
+    async def delete_session(self, *, session_id: str) -> None:
+        await self._t.request("PATCH", f"{_SESSIONS}/{session_id}", json={"deleted": True})
 
     async def run_chat_turn(
         self,
