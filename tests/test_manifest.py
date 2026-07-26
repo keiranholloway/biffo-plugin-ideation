@@ -23,6 +23,7 @@ from ideation.manifest import MANIFEST_PATH
 #   thread-messages-read         -> read the gathering conversation for the analyst
 #   owner-scoped-tables          -> session/report reads+writes on closed tables
 #   chat-agent-registry          -> registering the challenger/analyst at install
+#   idea-submission-read         -> get_submitted_idea (the seed-idea prefill read)
 # (No event:* — completion is materialised lazily on get_report, not via a
 #  subscriber, so the plugin binds no event capability.)
 REQUIRED_CAPABILITIES = frozenset(
@@ -34,6 +35,7 @@ REQUIRED_CAPABILITIES = frozenset(
         "thread-messages-read",
         "owner-scoped-tables",
         "chat-agent-registry",
+        "idea-submission-read",
     }
 )
 
