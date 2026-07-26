@@ -41,6 +41,7 @@ class FakeCore:
         self.runs: dict[str, Run] = {}
         self._replies = replies or ["Why now?"]
         self._seq = 0
+        self._submitted_idea: str | None = None
 
     # test helper: drive the async analysis run to a terminal state
     def resolve_run(

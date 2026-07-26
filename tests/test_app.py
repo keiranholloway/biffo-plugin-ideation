@@ -48,6 +48,7 @@ class FakeCore:
         self.reports: dict[str, dict[str, Any]] = {}
         self._seq = 0
         self._reply = 0
+        self._submitted_idea: str | None = None
 
     async def create_session(self, *, owner_sub, seed_idea, thread_id) -> Session:
         self._seq += 1
