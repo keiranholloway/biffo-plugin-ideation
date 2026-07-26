@@ -31,6 +31,7 @@ class Session:
     analysis_run_id: str | None = None
     title: str | None = None
     created_at: str | None = None
+    deleted: bool = False
 
 
 @dataclass(frozen=True)

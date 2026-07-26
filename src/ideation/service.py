@@ -127,9 +127,11 @@ class IdeationService:
         return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
 
     async def list_sessions(self, *, owner_sub: str) -> list[Session]:
-        """The founder's sessions, most-recent-first."""
+        """The founder's sessions, most-recent-first. Soft-deleted sessions are excluded."""
         sessions = await self._core.list_sessions(owner_sub=owner_sub)
-        return sorted(sessions, key=lambda s: s.created_at or "", reverse=True)
+        return sorted(
+            (s for s in sessions if not s.deleted), key=lambda s: s.created_at or "", reverse=True
+        )
 
     async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
         """The founder's own early-access idea submission, if any — used to prefill
@@ -182,6 +184,14 @@ class IdeationService:
         )
         await self._core.set_status(session_id=session_id, status=ANALYSING, analysis_run_id=run_id)
         return run_id
+
+    async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
+        """Soft-delete a session — deletable from any status (gathering,
+        analysing, or complete); no state-machine restriction, unlike chat_turn
+        or finalise. Raises SessionNotFoundError if missing or not owned by this
+        founder (the same ownership guard every other mutation already uses)."""
+        await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        await self._core.delete_session(session_id=session_id)
 
     async def get_report(self, *, owner_sub: str, session_id: str) -> dict[str, Any] | None:
         """The founder's report, or ``None`` while still gathering/analysing.
