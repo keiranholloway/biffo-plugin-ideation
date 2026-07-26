@@ -28,6 +28,10 @@
     "dir": "web/dist",
     "required_group": "founder"
   },
+  "admin_ingress": {
+    "required_group": "admin",
+    "app": "ideation.admin_app:app"
+  },
   "tables": [
     {
       "name": "ideation_sessions",
