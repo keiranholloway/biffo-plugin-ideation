@@ -79,6 +79,9 @@ class FakeCore:
             cur, status=status, analysis_run_id=analysis_run_id or cur.analysis_run_id
         )
 
+    async def delete_session(self, *, session_id) -> None:
+        self.sessions[session_id] = replace(self.sessions[session_id], deleted=True)
+
     async def run_chat_turn(
         self, *, thread_id, owner_sub, agent_name, system_prompt, user_text, model
     ) -> TurnResult:
@@ -331,3 +334,34 @@ def test_get_submitted_idea_returns_null_when_not_submitted(client, core):
 
     assert resp.status_code == 200
     assert resp.json() == {"idea": None}
+
+
+def test_delete_session_returns_204(client, core):
+    sid = client.post("/sessions", json={"seed_idea": "an idea"}).json()["session_id"]
+    resp = client.post(f"/sessions/{sid}/delete")
+    assert resp.status_code == 204
+
+    # Verify session is marked as deleted
+    assert core.sessions[sid].deleted is True
+
+
+def test_delete_nonexistent_session_is_404(client):
+    resp = client.post("/sessions/nope/delete")
+    assert resp.status_code == 404
+
+
+def test_delete_another_founders_session_is_404(client, core):
+    # Create a session owned by alice
+    sid = client.post("/sessions", json={"seed_idea": "alice's idea"}).json()["session_id"]
+
+    # Try to delete it as a different founder (bob)
+    app.dependency_overrides[require_founder] = lambda: ForwardedUser(
+        sub="bob", groups=["founder"], token="tok"
+    )
+    resp = client.post(f"/sessions/{sid}/delete")
+    assert resp.status_code == 404
+
+    # Restore the override
+    app.dependency_overrides[require_founder] = lambda: ForwardedUser(
+        sub="alice", groups=["founder"], token="tok"
+    )

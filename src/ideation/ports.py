@@ -51,6 +51,8 @@ class CoreGateway(Protocol):
         self, *, session_id: str, status: str, analysis_run_id: str | None = None
     ) -> None: ...
 
+    async def delete_session(self, *, session_id: str) -> None: ...
+
     async def run_chat_turn(
         self,
         *,

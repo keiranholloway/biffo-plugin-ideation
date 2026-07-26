@@ -117,6 +117,28 @@ def test_set_status_omits_run_id_when_absent():
     assert t.calls[-1]["json"] == {"status": "complete"}
 
 
+def test_delete_session_patches_with_deleted_true():
+    t = FakeTransport()
+    gw = CoreHttpGateway(t)
+    _run(gw.delete_session(session_id="sess-1"))
+    assert t.call("PATCH", f"{_SESSIONS}/sess-1")["json"] == {"deleted": True}
+
+
+def test_session_from_row_maps_deleted_field():
+    from ideation.adapter import _session_from_row
+
+    row = _row(deleted=True)
+    session = _session_from_row(row)
+    assert session.deleted is True
+
+    row_no_deleted = _row()
+    # deleted key was not in original _row, so it won't be there
+    if "deleted" in row_no_deleted:
+        del row_no_deleted["deleted"]
+    session_no_deleted = _session_from_row(row_no_deleted)
+    assert session_no_deleted.deleted is False
+
+
 def test_list_sessions_maps_rows_including_created_at():
     t = FakeTransport()
     t.on(

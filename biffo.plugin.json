@@ -73,6 +73,12 @@
           "type": "String(36)",
           "nullable": true,
           "description": "The async agent-runtime run that produced the report (set on finalise)."
+        },
+        {
+          "name": "deleted",
+          "type": "Boolean",
+          "nullable": false,
+          "description": "Soft-delete flag. True means the founder deleted this session from their sidebar; the row is never destroyed (recoverable later), just excluded from list_sessions. Defaults false."
         }
       ],
       "indexes": [
