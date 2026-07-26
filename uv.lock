@@ -63,7 +63,6 @@ dependencies = [
     { name = "biffo-plugin-sdk", extra = ["sigv4", "user-serving"] },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "mangum" },
     { name = "pydantic" },
 ]
 
@@ -81,7 +80,6 @@ requires-dist = [
     { name = "biffo-plugin-sdk", extras = ["user-serving", "sigv4"], specifier = ">=1.1,<2.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "mangum", specifier = ">=0.19.0" },
     { name = "pydantic", specifier = ">=2.10.4" },
 ]
 

@@ -104,3 +104,10 @@ class CoreGateway(Protocol):
     ) -> None: ...
 
     async def get_report(self, *, session_id: str) -> dict[str, Any] | None: ...
+
+    async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
+        """The founder's own early-access idea submission, if any (the seed-idea
+        prefill source). ``owner_sub`` is accepted for parity with the rest of this
+        port and used by non-HTTP adapters/fakes; the real HTTP adapter relies on
+        Core's forwarded-token scoping instead."""
+        ...
