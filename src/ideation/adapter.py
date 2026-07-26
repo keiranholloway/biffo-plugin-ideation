@@ -34,6 +34,7 @@ _REPORTS = f"{_ROOT}/owner-data/ideation_reports"
 _AGENT_CHAT = f"{_ROOT}/agent-chat"
 _AGENT_RUNS = f"{_ROOT}/agent-runs"
 _IDEA_SUBMISSIONS = f"{_ROOT}/idea-submissions/mine"
+_PLUGIN_CONFIG = f"{_ROOT}/plugins/me/config"
 
 
 class CoreHttpError(Exception):
@@ -229,6 +230,18 @@ class CoreHttpGateway:
             "scorecard": _load_json_column(row.get("scorecard")),
             "model": row.get("model"),
         }
+
+    async def get_own_config(self, *, role: str) -> dict[str, Any] | None:
+        """The live, admin-editable config for one of this plugin's own roles
+        (e.g. "analyst"), via the SigV4-only internal read (no forwarded founder
+        token needed — this data isn't founder-owned). None if never configured
+        (e.g. before an admin/seed script has set one) — the caller falls back
+        to a built-in default in that case."""
+        try:
+            row = await self._t.request("GET", f"{_PLUGIN_CONFIG}/{role}")
+        except CoreNotFoundError:
+            return None
+        return {"system_prompt": row["system_prompt"], "model": row["model"]}
 
     async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
         try:

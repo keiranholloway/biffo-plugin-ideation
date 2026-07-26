@@ -8,8 +8,13 @@ build_payload()'s exact output to today's frozen static registration.
 
 from __future__ import annotations
 
-from ideation.definitions import CHALLENGER_AGENT_NAME, CHALLENGER_INSTRUCTIONS
-from scripts.seed_chat_agents import build_payload
+from ideation.definitions import (
+    ANALYST_AGENT_NAME,
+    ANALYST_INSTRUCTIONS,
+    CHALLENGER_AGENT_NAME,
+    CHALLENGER_INSTRUCTIONS,
+)
+from scripts.seed_chat_agents import build_analyst_payload, build_payload
 
 
 def test_seed_payload_matches_the_current_static_challenger_config() -> None:
@@ -17,5 +22,14 @@ def test_seed_payload_matches_the_current_static_challenger_config() -> None:
     assert payload["agent_key"] == CHALLENGER_AGENT_NAME == "ideation-challenger"
     assert payload["system_prompt"] == CHALLENGER_INSTRUCTIONS
     assert payload["role"] == "challenger"
+    assert payload["required_group"] == "founder"
+    assert payload["active"] is True
+
+
+def test_analyst_seed_payload_matches_the_current_hardcoded_analyst_config() -> None:
+    payload = build_analyst_payload()
+    assert payload["agent_key"] == ANALYST_AGENT_NAME == "ideation-analyst"
+    assert payload["system_prompt"] == ANALYST_INSTRUCTIONS
+    assert payload["role"] == "analyst"
     assert payload["required_group"] == "founder"
     assert payload["active"] is True
