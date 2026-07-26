@@ -79,7 +79,14 @@ def test_create_session_posts_without_owner_and_parses_the_row():
     t.on("POST", _SESSIONS, _row())
     gw = CoreHttpGateway(t)
 
-    session = _run(gw.create_session(owner_sub="alice", seed_idea="an idea", thread_id="th-1"))
+    session = _run(
+        gw.create_session(
+            owner_sub="alice",
+            seed_idea="an idea",
+            thread_id="th-1",
+            challenger_agent_key=CHALLENGER_AGENT_NAME,
+        )
+    )
 
     body = t.call("POST", _SESSIONS)["json"]
     assert body == {
@@ -87,6 +94,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
         "thread_id": "th-1",
         "status": GATHERING,
         "turn_count": 0,
+        "challenger_agent_key": CHALLENGER_AGENT_NAME,
     }
     assert "owner_sub" not in body  # Core stamps the owner from the token, not the body
     assert session.id == "sess-1" and session.owner_sub == "alice"
@@ -318,3 +326,79 @@ def test_get_submitted_idea_maps_404_to_none():
     idea = _run(gw.get_submitted_idea(owner_sub="alice"))
 
     assert idea is None
+
+
+# ── own config (live, admin-editable role config) ────────────────────────────
+
+
+def test_get_own_config_returns_the_row():
+    t = FakeTransport()
+    t.on(
+        "GET",
+        "/api/v1/internal/plugins/me/config/analyst",
+        {"system_prompt": "Analyze rigorously.", "model": "some/model"},
+    )
+    gw = CoreHttpGateway(t)
+
+    config = _run(gw.get_own_config(role="analyst"))
+
+    assert config == {"system_prompt": "Analyze rigorously.", "model": "some/model"}
+
+
+def test_get_own_config_maps_404_to_none():
+    t = FakeTransport()
+    t.on("GET", "/api/v1/internal/plugins/me/config/analyst", CoreNotFoundError())
+    gw = CoreHttpGateway(t)
+
+    config = _run(gw.get_own_config(role="analyst"))
+
+    assert config is None
+
+
+def test_list_active_agents_passes_the_role_filter_and_returns_rows():
+    t = FakeTransport()
+    rows = [{"agent_key": "k1", "agent_name": "Skeptic"}, {"agent_key": "k2", "agent_name": "Ally"}]
+    t.on("GET", "/api/v1/internal/plugins/me/config", rows)
+    gw = CoreHttpGateway(t)
+
+    result = _run(gw.list_active_agents(role="challenger"))
+
+    assert result == rows
+    assert t.call("GET", "/api/v1/internal/plugins/me/config")["params"] == {"role": "challenger"}
+
+
+# ── session row mapping ──────────────────────────────────────────────────────
+
+
+def test_session_from_row_maps_challenger_agent_key():
+    t = FakeTransport()
+    t.on("POST", _SESSIONS, _row(challenger_agent_key="custom-agent"))
+    gw = CoreHttpGateway(t)
+
+    session = _run(
+        gw.create_session(
+            owner_sub="alice",
+            seed_idea="an idea",
+            thread_id="th-1",
+            challenger_agent_key="custom-agent",
+        )
+    )
+
+    assert session.challenger_agent_key == "custom-agent"
+
+
+def test_session_from_row_falls_back_to_the_built_in_challenger_when_missing():
+    t = FakeTransport()
+    t.on("POST", _SESSIONS, _row())  # no challenger_agent_key in the row (pre-existing session)
+    gw = CoreHttpGateway(t)
+
+    session = _run(
+        gw.create_session(
+            owner_sub="alice",
+            seed_idea="an idea",
+            thread_id="th-1",
+            challenger_agent_key=CHALLENGER_AGENT_NAME,
+        )
+    )
+
+    assert session.challenger_agent_key == CHALLENGER_AGENT_NAME

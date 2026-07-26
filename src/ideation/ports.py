@@ -33,7 +33,7 @@ class CoreGateway(Protocol):
     """
 
     async def create_session(
-        self, *, owner_sub: str, seed_idea: str, thread_id: str
+        self, *, owner_sub: str, seed_idea: str, thread_id: str, challenger_agent_key: str
     ) -> Session: ...
 
     async def get_session(self, *, owner_sub: str, session_id: str) -> Session | None: ...
@@ -106,6 +106,19 @@ class CoreGateway(Protocol):
     ) -> None: ...
 
     async def get_report(self, *, session_id: str) -> dict[str, Any] | None: ...
+
+    async def get_own_config(self, *, role: str) -> dict[str, Any] | None:
+        """The live, admin-editable config (system_prompt + model) for one of
+        this plugin's own roles, or None if never configured."""
+        ...
+
+    async def list_active_agents(self, *, role: str) -> list[dict[str, Any]]:
+        """Every active row for this plugin's own given role (e.g. "challenger")
+        — for a founder-facing picker. Each item carries at least agent_key and
+        agent_name; callers must not forward system_prompt to a founder-facing
+        response (ADR-0016 §1 — never send prompt text to an unprivileged
+        caller, even though it's already been read server-side)."""
+        ...
 
     async def get_submitted_idea(self, *, owner_sub: str) -> str | None:
         """The founder's own early-access idea submission, if any (the seed-idea

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { getCurrentSession } from './lib/auth'
-import { ApiError, createApi, type Api, type Report, type SessionState, type SessionSummary } from './lib/api'
+import { ApiError, createApi, type Agent, type Api, type Report, type SessionState, type SessionSummary } from './lib/api'
 import { ReportCard } from './components/ReportCard'
 import { Sidebar } from './components/Sidebar'
 
@@ -33,6 +33,8 @@ export default function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [submittedIdea, setSubmittedIdea] = useState<string | null>(null)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [agentKey, setAgentKey] = useState<string>('')
 
   // Read the shared portal session; no session → redirect to the portal login.
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function App() {
     if (!api) return
     void refreshSessions()
     void api.getSubmittedIdea().then((r) => setSubmittedIdea(r.idea)).catch(() => {})
+    void api.getAgents().then(setAgents).catch(() => {})
   }, [api])
 
   async function refreshSessions() {
@@ -97,6 +100,7 @@ export default function App() {
     setMessages([])
     setReport(null)
     setInput('')
+    setAgentKey('')
   }
 
   async function handleSelectSession(clicked: SessionSummary) {
@@ -135,7 +139,7 @@ export default function App() {
     setBusy(true)
     setError(null)
     try {
-      const r = await api.startSession(seed.trim())
+      const r = await api.startSession(seed.trim(), agentKey || null)
       setView({ kind: 'live', sessionId: r.session_id })
       setSession(r)
       setMessages([
@@ -226,6 +230,23 @@ export default function App() {
               placeholder="e.g. a scheduling assistant for independent coaches…"
               rows={4}
             />
+            {agents.length > 1 && (
+              <label className="ide-agent-picker">
+                Challenger persona
+                <select
+                  aria-label="Challenger persona"
+                  value={agentKey}
+                  onChange={(e) => setAgentKey(e.target.value)}
+                >
+                  <option value="">Default</option>
+                  {agents.map((a) => (
+                    <option key={a.agent_key} value={a.agent_key}>
+                      {a.agent_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button onClick={() => void start()} disabled={busy || !seed.trim()}>
               {busy ? 'Starting…' : 'Start'}
             </button>

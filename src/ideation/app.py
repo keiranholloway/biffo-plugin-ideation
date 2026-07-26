@@ -80,6 +80,10 @@ async def _on_ideation_error(_: Request, exc: IdeationError) -> JSONResponse:
 
 class StartSessionRequest(BaseModel):
     seed_idea: str = Field(min_length=1, max_length=16_000)
+    #: Which active challenger to use — omitted (or null) falls back to the
+    #: built-in seed challenger. Never trusted as anything but a lookup key;
+    #: Core resolves the actual prompt server-side (ADR-0016 §1).
+    challenger_agent_key: str | None = None
 
 
 class MessageRequest(BaseModel):
@@ -105,6 +109,17 @@ async def get_submitted_idea(
     seed-idea prefill affordance. ``idea`` is null if they never submitted one."""
     idea = await svc.get_submitted_idea(owner_sub=founder.sub)
     return {"idea": idea}
+
+
+@app.get("/agents")
+async def list_agents(
+    founder: ForwardedUser = Depends(require_founder),
+    svc: IdeationService = Depends(get_service),
+) -> list[dict]:
+    """The active challenger roster for the seed view's persona picker.
+    agent_key/agent_name only — never system_prompt (ADR-0016 §1: an
+    unprivileged caller never sees prompt text, even read-only)."""
+    return await svc.list_active_challengers()
 
 
 def _derive_title(seed_idea: str, *, max_len: int = 60) -> str:
@@ -150,7 +165,11 @@ async def start_session(
 ) -> dict:
     """Open a session for the founder's idea and run the first challenger turn (the
     idea is turn 1's fenced message). Returns the challenger's opening reply."""
-    session = await svc.start_session(owner_sub=founder.sub, seed_idea=body.seed_idea)
+    session = await svc.start_session(
+        owner_sub=founder.sub,
+        seed_idea=body.seed_idea,
+        challenger_agent_key=body.challenger_agent_key,
+    )
     turn = await svc.chat_turn(
         owner_sub=founder.sub, session_id=session.id, user_message=body.seed_idea
     )

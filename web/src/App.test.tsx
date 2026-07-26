@@ -558,6 +558,92 @@ describe('App', () => {
     })
   })
 
+  it('shows the challenger picker when multiple active agents exist, and sends the chosen key', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    let capturedBody: string | null = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/agents') {
+        return {
+          ok: true,
+          json: async () => [
+            { agent_key: 'skeptic', agent_name: 'The Skeptic' },
+            { agent_key: 'ally', agent_name: 'The Ally' },
+          ],
+          text: async () => '',
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'POST') {
+        capturedBody = init?.body as string
+        return {
+          ok: true,
+          json: async () => ({
+            reply: 'Tell me more',
+            session_id: 's1',
+            status: 'gathering',
+            turn_count: 1,
+            min_turns: 1,
+            max_turns: 5,
+            can_finalise: true,
+          }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Challenger persona')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('Your idea'), { target: { value: 'An idea' } })
+    fireEvent.change(screen.getByLabelText('Challenger persona'), { target: { value: 'ally' } })
+    screen.getByText('Start').click()
+
+    await waitFor(() => {
+      expect(capturedBody).not.toBeNull()
+    })
+    expect(JSON.parse(capturedBody!)).toEqual({
+      seed_idea: 'An idea',
+      challenger_agent_key: 'ally',
+    })
+  })
+
+  it('does not show the challenger picker when zero or one active agent exists', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/agents') {
+        return {
+          ok: true,
+          json: async () => [{ agent_key: 'skeptic', agent_name: 'The Skeptic' }],
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByLabelText('Challenger persona')).not.toBeInTheDocument()
+  })
+
   it('deletes a session and refreshes the list when confirmed', async () => {
     const mockSession = createMockSession()
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)

@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from ideation.definitions import (
+    ANALYST_INSTRUCTIONS,
     CHALLENGER_AGENT_NAME,
     CHALLENGER_INSTRUCTIONS,
     REPORT_TOOL_NAME,
@@ -42,6 +43,8 @@ class FakeCore:
         self._replies = replies or ["Why now?"]
         self._seq = 0
         self._submitted_idea: str | None = None
+        self._own_config: dict[str, dict[str, Any]] = {}
+        self._active_agents: dict[str, list[dict[str, Any]]] = {}
 
     # test helper: drive the async analysis run to a terminal state
     def resolve_run(
@@ -54,7 +57,9 @@ class FakeCore:
     ) -> None:
         self.runs[run_id] = Run(id=run_id, status=status, messages=messages or [], model=model)
 
-    async def create_session(self, *, owner_sub: str, seed_idea: str, thread_id: str) -> Session:
+    async def create_session(
+        self, *, owner_sub: str, seed_idea: str, thread_id: str, challenger_agent_key: str
+    ) -> Session:
         self._seq += 1
         session = Session(
             id=f"s{self._seq}",
@@ -63,6 +68,7 @@ class FakeCore:
             status=GATHERING,
             thread_id=thread_id,
             turn_count=0,
+            challenger_agent_key=challenger_agent_key,
         )
         self.sessions[session.id] = session
         return session
@@ -166,6 +172,14 @@ class FakeCore:
         """Returns a submitted idea or None if not found."""
         # For testing, can be populated by the test
         return getattr(self, "_submitted_idea", None)
+
+    async def get_own_config(self, *, role: str) -> dict[str, Any] | None:
+        """Populated per-test via _own_config: {role: {system_prompt, model}}."""
+        return self._own_config.get(role)
+
+    async def list_active_agents(self, *, role: str) -> list[dict[str, Any]]:
+        """Populated per-test via _active_agents: {role: [{agent_key, agent_name}, ...]}."""
+        return self._active_agents.get(role, [])
 
 
 def _service(core: FakeCore, **kw: Any) -> IdeationService:
@@ -307,6 +321,32 @@ class TestFinaliseAndReport:
         assert req["thread_id"] == core.sessions[sid].thread_id
         assert req["output_tool"]["function"]["name"] == REPORT_TOOL_NAME
         assert "web_search" in req["definition"]["tools"]
+
+    def test_finalise_uses_the_live_analyst_config_when_set(self) -> None:
+        core = FakeCore()
+        core._own_config["analyst"] = {
+            "system_prompt": "A live-edited analyst prompt.",
+            "model": "some/live-model",
+        }
+        svc = _service(core, min_turns=1)
+        sid = self._gathered(core, svc, turns=1)
+
+        asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
+
+        req = core.analysis_requests[0]
+        assert req["definition"]["instructions"] == "A live-edited analyst prompt."
+        assert req["definition"]["model"] == "some/live-model"
+
+    def test_finalise_falls_back_to_the_built_in_analyst_when_unconfigured(self) -> None:
+        core = FakeCore()  # no _own_config["analyst"] set
+        svc = _service(core, min_turns=1)
+        sid = self._gathered(core, svc, turns=1)
+
+        asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
+
+        req = core.analysis_requests[0]
+        assert req["definition"]["instructions"] == ANALYST_INSTRUCTIONS
+        assert req["definition"]["model"] == "analysis/m"  # _service()'s default
 
     def test_finalise_needs_enough_turns(self) -> None:
         core = FakeCore()

@@ -186,10 +186,15 @@ def challenger_definition(*, model: str) -> dict[str, Any]:
     }
 
 
-def analyst_definition(*, model: str) -> dict[str, Any]:
+def analyst_definition(*, model: str, instructions: str = ANALYST_INSTRUCTIONS) -> dict[str, Any]:
     """The async analysis agent: web search to research, then the report *output
     tool* to return structured output. ``max_turns`` allows several tool-use turns
     before the final structured answer.
+
+    ``instructions`` defaults to the built-in ``ANALYST_INSTRUCTIONS`` but can be
+    overridden — the caller (``IdeationService.finalise``) passes the live,
+    admin-editable prompt when one is configured, falling back to this default
+    otherwise (e.g. before an admin has ever set one).
 
     ``tools`` names only **registry** tools (``web_search``); the report tool is an
     *output tool* — offered to the model via the run's ``output_tools`` (see
@@ -197,7 +202,7 @@ def analyst_definition(*, model: str) -> dict[str, Any]:
     ``submit_ideation_report`` in ``tools`` would fail the run as an unknown tool
     (ADR-0017 §5 / agent-runtime tool registry)."""
     return {
-        "instructions": ANALYST_INSTRUCTIONS,
+        "instructions": instructions,
         "model": model,
         "tools": ["web_search"],
         "max_turns": 8,

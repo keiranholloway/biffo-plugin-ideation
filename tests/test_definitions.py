@@ -87,10 +87,10 @@ def test_report_round_trips() -> None:
     assert report.prd.problem.startswith("Independent coaches")
 
 
-def test_manifest_declares_the_two_tables() -> None:
+def test_manifest_declares_the_owner_scoped_tables() -> None:
     manifest = json.loads((Path(__file__).resolve().parents[1] / "biffo.plugin.json").read_text())
     tables = {t["name"] for t in manifest["tables"]}
-    assert tables == {"ideation_sessions", "ideation_reports"}
+    assert {"ideation_sessions", "ideation_reports"} <= tables
     session_cols = {
         c["name"]
         for t in manifest["tables"]

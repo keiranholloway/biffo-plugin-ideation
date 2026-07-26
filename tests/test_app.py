@@ -49,8 +49,12 @@ class FakeCore:
         self._seq = 0
         self._reply = 0
         self._submitted_idea: str | None = None
+        self._own_config: dict[str, dict[str, Any]] = {}
+        self._active_agents: dict[str, list[dict[str, Any]]] = {}
 
-    async def create_session(self, *, owner_sub, seed_idea, thread_id) -> Session:
+    async def create_session(
+        self, *, owner_sub, seed_idea, thread_id, challenger_agent_key
+    ) -> Session:
         self._seq += 1
         s = Session(
             id=f"s{self._seq}",
@@ -59,6 +63,7 @@ class FakeCore:
             status=GATHERING,
             thread_id=thread_id,
             turn_count=0,
+            challenger_agent_key=challenger_agent_key,
         )
         self.sessions[s.id] = s
         return s
@@ -105,6 +110,12 @@ class FakeCore:
 
     async def get_submitted_idea(self, *, owner_sub) -> str | None:
         return getattr(self, "_submitted_idea", None)
+
+    async def get_own_config(self, *, role) -> dict[str, Any] | None:
+        return self._own_config.get(role)
+
+    async def list_active_agents(self, *, role) -> list[dict[str, Any]]:
+        return self._active_agents.get(role, [])
 
     # test helper
     def complete_analysis(self, tool_call: dict[str, Any]) -> None:
@@ -176,6 +187,40 @@ def test_full_gathering_then_finalise_then_report(client, core):
     report = client.get(f"/sessions/{sid}/report").json()
     assert report["status"] == "complete"
     assert report["report"]["prd"]["problem"] == "Coaches drown in admin."
+
+
+def test_start_session_forwards_the_chosen_challenger_agent_key(client, core):
+    core._active_agents["challenger"] = [{"agent_key": "custom", "agent_name": "Custom"}]
+    resp = client.post("/sessions", json={"seed_idea": "an idea", "challenger_agent_key": "custom"})
+    assert resp.status_code == 201, resp.text
+    sid = resp.json()["session_id"]
+    assert core.sessions[sid].challenger_agent_key == "custom"
+
+
+def test_start_session_without_a_chosen_agent_falls_back_to_the_default(client, core):
+    resp = client.post("/sessions", json={"seed_idea": "an idea"})
+    assert resp.status_code == 201, resp.text
+    sid = resp.json()["session_id"]
+    from ideation.definitions import CHALLENGER_AGENT_NAME
+
+    assert core.sessions[sid].challenger_agent_key == CHALLENGER_AGENT_NAME
+
+
+def test_list_agents_returns_only_key_and_name(client, core):
+    core._active_agents["challenger"] = [
+        {
+            "agent_key": "skeptic",
+            "agent_name": "The Skeptic",
+            "system_prompt": "top secret prompt text",
+            "model": "some/model",
+        }
+    ]
+    resp = client.get("/agents")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == [{"agent_key": "skeptic", "agent_name": "The Skeptic"}]
+    assert "system_prompt" not in body[0]
+    assert "model" not in body[0]
 
 
 def test_unknown_session_is_404(client):
