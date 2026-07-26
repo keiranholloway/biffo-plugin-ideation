@@ -12,7 +12,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNewIdea }: SidebarProp
     <nav className="ide-sidebar">
       <div className="ide-sidebar-header">
         <button className="ide-sidebar-new" onClick={onNewIdea}>
-          + New idea
+          Ideate
         </button>
       </div>
 

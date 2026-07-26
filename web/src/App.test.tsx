@@ -219,8 +219,8 @@ describe('App', () => {
       expect(screen.getByText('Viability scorecard')).toBeInTheDocument()
     })
 
-    // Click + New idea to go back to seed form
-    screen.getByText('+ New idea').click()
+    // Click Ideate to go back to seed form
+    screen.getByText('Ideate').click()
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText("e.g. a scheduling assistant for independent coaches…")).toBeInTheDocument()
@@ -422,5 +422,139 @@ describe('App', () => {
     })
 
     expect(screen.queryByText('Old summary')).not.toBeInTheDocument()
+  })
+
+  it('shows the "Use my original idea" button when submitted idea exists', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/submitted-idea') {
+        return {
+          ok: true,
+          json: async () => ({ idea: 'A scheduling assistant for independent coaches' }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Use my original idea')).toBeInTheDocument()
+    })
+  })
+
+  it('hides the "Use my original idea" button when submitted idea is null', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/submitted-idea') {
+        return {
+          ok: true,
+          json: async () => ({ idea: null }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Use my original idea')).not.toBeInTheDocument()
+  })
+
+  it('prefills the textarea when clicking "Use my original idea"', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/submitted-idea') {
+        return {
+          ok: true,
+          json: async () => ({ idea: 'My submitted coaching app idea' }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Use my original idea')).toBeInTheDocument()
+    })
+
+    const textarea = screen.getByLabelText('Your idea') as HTMLTextAreaElement
+    expect(textarea.value).toBe('')
+
+    fireEvent.click(screen.getByText('Use my original idea'))
+
+    await waitFor(() => {
+      expect(textarea.value).toBe('My submitted coaching app idea')
+    })
+  })
+
+  it('still allows starting with the seed form normally when no submitted idea', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/submitted-idea') {
+        return {
+          ok: true,
+          json: async () => ({ idea: null }),
+          text: async () => '',
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({
+            reply: 'Tell me more',
+            session_id: 's1',
+            status: 'gathering',
+            turn_count: 1,
+            min_turns: 1,
+            max_turns: 5,
+            can_finalise: true,
+          }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('Your idea'), { target: { value: 'My new idea' } })
+    screen.getByText('Start').click()
+
+    await waitFor(() => {
+      expect(screen.getByText('Generate review')).toBeInTheDocument()
+    })
   })
 })

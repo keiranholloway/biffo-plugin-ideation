@@ -32,6 +32,7 @@ export default function App() {
   const [report, setReport] = useState<Report | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [submittedIdea, setSubmittedIdea] = useState<string | null>(null)
 
   // Read the shared portal session; no session → redirect to the portal login.
   useEffect(() => {
@@ -49,6 +50,7 @@ export default function App() {
   useEffect(() => {
     if (!api) return
     void refreshSessions()
+    void api.getSubmittedIdea().then((r) => setSubmittedIdea(r.idea)).catch(() => {})
   }, [api])
 
   async function refreshSessions() {
@@ -193,6 +195,15 @@ export default function App() {
         {view.kind === 'new' && !session && (
           <section className="ide-seed">
             <p>Describe your idea. I&apos;ll pressure-test it over a few questions, then produce a PRD and a viability scorecard.</p>
+            {submittedIdea && (
+              <button
+                type="button"
+                className="ide-use-original"
+                onClick={() => setSeed(submittedIdea)}
+              >
+                Use my original idea
+              </button>
+            )}
             <textarea
               aria-label="Your idea"
               value={seed}

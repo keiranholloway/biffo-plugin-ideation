@@ -38,6 +38,7 @@ button:disabled { background: #b7b7c9; cursor: not-allowed; }
 .ide-compose input { flex: 1 1 12rem; }
 .ide-finalise { background: #059669; }
 .ide-turns { font-size: .8rem; color: #667; }
+.ide-use-original { background: none; border: 1px solid #2563eb; color: #2563eb; margin-bottom: 1rem; width: 100%; }
 .ide-analysing { color: #4338ca; font-weight: 600; }
 .ide-report { background: #fff; border: 1px solid #e3e3ee; border-top: 3px solid #2563eb; border-radius: 12px; padding: 1.25rem; margin-top: 1.5rem; }
 .ide-summary { font-size: 1.05rem; }
