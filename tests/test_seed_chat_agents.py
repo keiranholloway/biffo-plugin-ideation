@@ -8,8 +8,9 @@ build_payload()'s exact output to today's frozen static registration.
 
 from __future__ import annotations
 
-from ideation.definitions import CHALLENGER_AGENT_NAME, CHALLENGER_INSTRUCTIONS
 from seed_chat_agents import build_payload  # type: ignore[reportMissingImports]
+
+from ideation.definitions import CHALLENGER_AGENT_NAME, CHALLENGER_INSTRUCTIONS
 
 
 def test_seed_payload_matches_the_current_static_challenger_config() -> None:
