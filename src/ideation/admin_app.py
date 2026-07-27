@@ -120,23 +120,6 @@ async def delete_model_catalog_entry(
     await _core_request("DELETE", f"{_MODEL_CATALOG_BASE}/{entry_id}", admin=admin)
 
 
-# ── identity (pool/client info for the admin UI's own Cognito session read) ───
-# ── The admin UI fetches this instead of /.well-known/biffo-identity.json, ──
-# ── which is served from the portal's CloudFront (a different origin). ────────
-
-
-@app.get("/identity")
-async def identity() -> dict[str, str]:
-    """Pool/client info for the admin UI's own Cognito session read — mirrors
-    /.well-known/biffo-identity.json, which the admin UI can't reach (it's
-    served from a different origin than the portal's CloudFront bucket)."""
-    return {
-        "userPoolId": os.environ.get("BIFFO_COGNITO_USER_POOL_ID", ""),
-        "clientId": os.environ.get("BIFFO_COGNITO_CLIENT_ID", ""),
-        "region": os.environ.get("BIFFO_COGNITO_REGION", ""),
-    }
-
-
 # ── static admin UI (mount conditionally so this app works before the UI is ──
 # ── built, e.g. in this milestone's own tests) ────────────────────────────────
 
