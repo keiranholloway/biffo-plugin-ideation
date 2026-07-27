@@ -4,9 +4,18 @@ A FastAPI app mounted by the shared plugin host at
 ``/api/v1/plugins/ideation/admin/*`` — admin-gated (both by the host's own
 group-gate and, defence-in-depth, this app's own require_group("admin"),
 mirroring app.py's founder-facing convention). Proxies Core's admin routes
-for chat-agent and model-catalog management as same-origin routes, and
-(once web-admin/ has a built UI — a later milestone) serves that static
-bundle too.
+for chat-agent management as same-origin routes, and serves the built
+web-admin/ bundle.
+
+**The model catalog is not proxied here.** Its five CRUD routes are declared
+in ``biffo.plugin.json``'s ``api_routes``, which means Core generates and
+serves them and the plugin host forwards them to Core itself
+(biffo-template#684, core >=0.136.0), authorised by the table's own ADR-0004
+``permissions`` (admin on every operation). This app used to proxy them by
+calling their public path — but that path resolves back to the host, so the
+host was calling itself and then forwarding on to Core: three hops, two of
+them cold-startable, for a request Core answers in one (biffo-template#652).
+The admin UI calls ``/api/v1/plugins/ideation/model-catalog`` directly.
 
 Unlike app.py's founder-facing CoreTransport (SigV4-signed as this plugin's
 own service principal, forwarding a founder token for dual-auth), these Core
@@ -32,7 +41,14 @@ require_admin = require_group("admin")
 _CORE_API_URL = os.environ.get("BIFFO_CORE_API_URL", "")
 _PLUGIN_NAME = "ideation"
 _CHAT_AGENTS_BASE = f"/api/v1/admin/plugins/{_PLUGIN_NAME}/chat-agents"
-_MODEL_CATALOG_BASE = f"/api/v1/plugins/{_PLUGIN_NAME}/model-catalog"
+
+#: How long to wait on Core. Explicit, and matching the ``biffo_plugin_sdk``
+#: ``BiffoAPIClient`` default: a bare ``httpx.AsyncClient()`` silently carries
+#: httpx's own 5s default that nobody here chose, and Core cold-starts in ~4.3s
+#: of init before it runs a line of handler — so the unchosen default expires on
+#: exactly the requests that most need it, surfacing as a 500 with no upstream
+#: status to explain it (biffo-template#652).
+_CORE_TIMEOUT_SECONDS = 30.0
 
 app = FastAPI(title="Ideation Engine Admin", docs_url=None, redoc_url=None)
 
@@ -43,7 +59,7 @@ async def _core_request(
     """Forward one call to Core, authenticated as the calling admin (not this
     plugin's own service principal — see module docstring)."""
     url = f"{_CORE_API_URL.rstrip('/')}{path}"
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=_CORE_TIMEOUT_SECONDS) as client:
         resp = await client.request(
             method, url, json=json, headers={"Authorization": f"Bearer {admin.token}"}
         )
@@ -84,40 +100,13 @@ async def delete_chat_agent(agent_key: str, admin: ForwardedUser = Depends(requi
     await _core_request("DELETE", f"{_CHAT_AGENTS_BASE}/{agent_key}", admin=admin)
 
 
-# ── model catalog ────────────────────────────────────────────────────────────
-
-
-@app.get("/model-catalog")
-async def list_model_catalog(admin: ForwardedUser = Depends(require_admin)) -> Any:
-    return await _core_request("GET", _MODEL_CATALOG_BASE, admin=admin)
-
-
-@app.post("/model-catalog", status_code=201)
-async def create_model_catalog_entry(
-    body: dict[str, Any], admin: ForwardedUser = Depends(require_admin)
-) -> Any:
-    return await _core_request("POST", _MODEL_CATALOG_BASE, admin=admin, json=body)
-
-
-@app.get("/model-catalog/{entry_id}")
-async def get_model_catalog_entry(
-    entry_id: str, admin: ForwardedUser = Depends(require_admin)
-) -> Any:
-    return await _core_request("GET", f"{_MODEL_CATALOG_BASE}/{entry_id}", admin=admin)
-
-
-@app.put("/model-catalog/{entry_id}")
-async def update_model_catalog_entry(
-    entry_id: str, body: dict[str, Any], admin: ForwardedUser = Depends(require_admin)
-) -> Any:
-    return await _core_request("PUT", f"{_MODEL_CATALOG_BASE}/{entry_id}", admin=admin, json=body)
-
-
-@app.delete("/model-catalog/{entry_id}", status_code=204)
-async def delete_model_catalog_entry(
-    entry_id: str, admin: ForwardedUser = Depends(require_admin)
-) -> None:
-    await _core_request("DELETE", f"{_MODEL_CATALOG_BASE}/{entry_id}", admin=admin)
+# ── model catalog: deliberately not here (see the module docstring) ──────────
+#
+# ``/model-catalog`` and ``/model-catalog/{id}`` are manifest-declared
+# ``api_routes``. Core serves them and the plugin host forwards them; the admin
+# UI calls ``/api/v1/plugins/ideation/model-catalog`` directly rather than a
+# proxy on this app. tests/test_admin_app.py pins that they stay absent here,
+# and tests/test_manifest.py pins that the manifest still declares them.
 
 
 # ── static admin UI (mount conditionally so this app works before the UI is ──

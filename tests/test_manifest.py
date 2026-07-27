@@ -148,6 +148,34 @@ def test_admin_managed_tables_have_matching_api_routes() -> None:
     assert admin_tables <= routed_tables
 
 
+def test_the_model_catalog_declares_every_route_the_admin_ui_calls() -> None:
+    # The admin UI calls these five directly at /api/v1/plugins/ideation/... —
+    # they are served by Core and forwarded by the plugin host
+    # (biffo-template#684), NOT proxied by admin_app any more. If a declaration
+    # is dropped here, the host stops recognising the path and the request falls
+    # through to the founder-gated plugin app instead: a 404 (or a 403 for an
+    # admin who is not also a founder), not an obvious missing route.
+    declared = {(r["method"], r["path"]) for r in _manifest()["api_routes"]}
+    assert declared >= {
+        ("GET", "/model-catalog"),
+        ("POST", "/model-catalog"),
+        ("GET", "/model-catalog/{id}"),
+        ("PUT", "/model-catalog/{id}"),
+        ("DELETE", "/model-catalog/{id}"),
+    }
+
+
+def test_the_core_floor_covers_declared_route_forwarding() -> None:
+    # Forwarding manifest-declared api_routes to Core landed in core 0.136.0
+    # (biffo-template#684). The admin UI now depends on it, so a Core below that
+    # would mount this plugin and silently serve no model catalog at all.
+    floor = _manifest()["required_core_version"].removeprefix(">=")
+    major, minor, patch = (int(part) for part in floor.split("."))
+    assert (major, minor, patch) >= (0, 136, 0), (
+        f"core floor {floor} predates declared-route forwarding (0.136.0)"
+    )
+
+
 def test_declares_a_founder_gated_user_ingress_pointing_at_the_asgi_app() -> None:
     # ADR-0021: the shared plugin host mounts this app. user_ingress references the
     # ASGI app as "<module>:<attr>", gated to the founder group. No handler/path —
