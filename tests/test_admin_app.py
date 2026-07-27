@@ -7,11 +7,13 @@ covered elsewhere (the SDK); this tests routing, auth-gating, and status-codes.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from biffo_plugin_sdk import ForwardedUser
 from fastapi import FastAPI
@@ -118,70 +120,43 @@ class TestChatAgentsRoutes:
         assert "agent-1" in call_args[0][1]
 
 
-class TestModelCatalogRoutes:
-    """Test all 5 model-catalog routes."""
+class TestModelCatalogIsNotProxiedHere:
+    """The model catalog is a manifest-declared api_route: Core serves it and
+    the plugin host forwards it (biffo-template#684). This app used to proxy it
+    by calling its *public* path — which resolves to the plugin host, so the
+    host called itself and forwarded on to Core. Three hops for a one-hop
+    request, and every one of them able to cold-start (biffo-template#652).
+    """
 
-    def test_list_model_catalog(self, client: TestClient, core_mock: AsyncMock) -> None:
-        core_mock.return_value = [{"id": "1", "model_id": "gpt-4", "label": "GPT-4"}]
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("get", "/model-catalog"),
+            ("post", "/model-catalog"),
+            ("get", "/model-catalog/1"),
+            ("put", "/model-catalog/1"),
+            ("delete", "/model-catalog/1"),
+        ],
+    )
+    def test_no_model_catalog_route_is_served(
+        self, client: TestClient, core_mock: AsyncMock, method: str, path: str
+    ) -> None:
+        resp = getattr(client, method)(path) if method in ("get", "delete") else None
+        if resp is None:
+            resp = getattr(client, method)(path, json={})
 
-        resp = client.get("/model-catalog")
+        assert resp.status_code == 404
+        core_mock.assert_not_called()
 
-        assert resp.status_code == 200
-        assert resp.json() == [{"id": "1", "model_id": "gpt-4", "label": "GPT-4"}]
-        core_mock.assert_called_once()
-        call_args = core_mock.call_args
-        assert call_args[0][0] == "GET"
-        assert "/api/v1/plugins/ideation/model-catalog" in call_args[0][1]
+    def test_the_self_calling_public_base_is_gone(self) -> None:
+        """The base that pointed back at the host's own public path is removed,
+        not merely unused — leaving it invites the next proxy route to reuse it."""
+        import ideation.admin_app
 
-    def test_create_model_catalog_entry(self, client: TestClient, core_mock: AsyncMock) -> None:
-        entry = {"id": "1", "model_id": "gpt-4", "label": "GPT-4"}
-        core_mock.return_value = entry
-
-        resp = client.post("/model-catalog", json={"model_id": "gpt-4", "label": "GPT-4"})
-
-        assert resp.status_code == 201
-        assert resp.json() == entry
-        core_mock.assert_called_once()
-        call_args = core_mock.call_args
-        assert call_args[0][0] == "POST"
-        assert "/api/v1/plugins/ideation/model-catalog" in call_args[0][1]
-
-    def test_get_model_catalog_entry(self, client: TestClient, core_mock: AsyncMock) -> None:
-        entry = {"id": "1", "model_id": "gpt-4", "label": "GPT-4"}
-        core_mock.return_value = entry
-
-        resp = client.get("/model-catalog/1")
-
-        assert resp.status_code == 200
-        assert resp.json() == entry
-        core_mock.assert_called_once()
-        call_args = core_mock.call_args
-        assert call_args[0][0] == "GET"
-        assert "1" in call_args[0][1]
-
-    def test_update_model_catalog_entry(self, client: TestClient, core_mock: AsyncMock) -> None:
-        updated_entry = {"id": "1", "model_id": "gpt-4", "label": "GPT-4-Updated"}
-        core_mock.return_value = updated_entry
-
-        resp = client.put("/model-catalog/1", json={"model_id": "gpt-4", "label": "GPT-4-Updated"})
-
-        assert resp.status_code == 200
-        assert resp.json() == updated_entry
-        core_mock.assert_called_once()
-        call_args = core_mock.call_args
-        assert call_args[0][0] == "PUT"
-        assert "1" in call_args[0][1]
-
-    def test_delete_model_catalog_entry(self, client: TestClient, core_mock: AsyncMock) -> None:
-        core_mock.return_value = None
-
-        resp = client.delete("/model-catalog/1")
-
-        assert resp.status_code == 204
-        core_mock.assert_called_once()
-        call_args = core_mock.call_args
-        assert call_args[0][0] == "DELETE"
-        assert "1" in call_args[0][1]
+        assert not hasattr(ideation.admin_app, "_MODEL_CATALOG_BASE")
+        # The one base still proxied resolves to Core directly (no /plugins/
+        # segment for API Gateway's catch-all to claim).
+        assert not ideation.admin_app._CHAT_AGENTS_BASE.startswith("/api/v1/plugins/")
 
 
 class TestAuthGating:
@@ -193,18 +168,58 @@ class TestAuthGating:
         app.dependency_overrides.clear()
         monkeypatched = TestClient(app, raise_server_exceptions=False)
 
-        # All 10 routes should reject with 401
+        # All 5 proxied routes should reject with 401
         assert monkeypatched.get("/chat-agents").status_code == 401
         assert monkeypatched.post("/chat-agents", json={}).status_code == 401
         assert monkeypatched.get("/chat-agents/key").status_code == 401
         assert monkeypatched.put("/chat-agents/key", json={}).status_code == 401
         assert monkeypatched.delete("/chat-agents/key").status_code == 401
 
-        assert monkeypatched.get("/model-catalog").status_code == 401
-        assert monkeypatched.post("/model-catalog", json={}).status_code == 401
-        assert monkeypatched.get("/model-catalog/id").status_code == 401
-        assert monkeypatched.put("/model-catalog/id", json={}).status_code == 401
-        assert monkeypatched.delete("/model-catalog/id").status_code == 401
+
+class TestCoreRequestTimeout:
+    """``_core_request``'s timeout is chosen here, not inherited from httpx.
+
+    A bare ``httpx.AsyncClient()`` applies httpx's own 5s default. Core
+    cold-starts in ~4.3s of init before running a line of handler, so that
+    unchosen default expires on precisely the requests that most need it — and
+    an expired client raises, surfacing as a 500 with no upstream status to
+    explain it (biffo-template#652).
+    """
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+        import ideation.admin_app
+
+        captured: dict[str, Any] = {}
+
+        def respond(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"ok": True})
+
+        class RecordingClient(httpx.AsyncClient):
+            def __init__(self, **kwargs: Any) -> None:
+                captured.update(kwargs)
+                super().__init__(transport=httpx.MockTransport(respond), **kwargs)
+
+        monkeypatch.setattr(ideation.admin_app.httpx, "AsyncClient", RecordingClient)
+        monkeypatch.setattr(ideation.admin_app, "_CORE_API_URL", "https://core.test")
+
+        admin = ForwardedUser(sub="admin-1", groups=["admin"], token="fake-admin-token")
+        result = asyncio.run(ideation.admin_app._core_request("GET", "/anything", admin=admin))
+        assert result == {"ok": True}
+        return captured
+
+    def test_passes_an_explicit_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert "timeout" in self._run(monkeypatch), (
+            "no timeout was passed, so httpx's own 5s default applies — shorter "
+            "than Core's cold start"
+        )
+
+    def test_the_timeout_outlasts_a_core_cold_start(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        timeout = httpx.Timeout(self._run(monkeypatch)["timeout"])
+
+        # 30s matches biffo_plugin_sdk's BiffoAPIClient default, and leaves room
+        # over the ~4.9s cold start measured in CloudWatch.
+        assert timeout.read is not None and timeout.read >= 30.0
+        assert timeout.connect is not None and timeout.connect >= 30.0
 
 
 class TestCoreErrorHandling:

@@ -9,7 +9,7 @@
     "product",
     "prd"
   ],
-  "required_core_version": ">=0.105.0",
+  "required_core_version": ">=0.136.0",
   "core_capabilities": {
     "chat-turn": "^1",
     "agent-run-request": "^1",
