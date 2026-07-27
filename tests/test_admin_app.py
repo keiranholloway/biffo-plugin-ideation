@@ -247,44 +247,20 @@ class TestCoreErrorHandling:
         ideation.admin_app._core_request = original
 
 
-class TestIdentityRoute:
-    """Test the /identity route that serves pool/client info for the admin UI."""
+def test_no_identity_route_the_admin_ui_now_uses_the_portals_well_known_document() -> None:
+    """The admin UI resolves its Cognito identity from the portal's public
+    /.well-known/biffo-identity.json (same origin, unauthenticated static
+    content) instead of a self-served /identity route. That route used to
+    exist here, but was a dead end even for same-origin callers: both the API
+    Gateway's JWT authorizer and the plugin host's group_gate sit in front of
+    this app, so it could never be reached before a session exists to prove
+    admin-group membership with — confirmed live, a direct fetch 401'd."""
+    app.dependency_overrides.clear()
+    client = TestClient(app)
 
-    def test_identity_route_returns_cognito_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """The /identity route requires no auth and returns pool/client/region."""
+    resp = client.get("/identity")
 
-        monkeypatch.setenv("BIFFO_COGNITO_USER_POOL_ID", "us-east-1_test123")
-        monkeypatch.setenv("BIFFO_COGNITO_CLIENT_ID", "test-client-456")
-        monkeypatch.setenv("BIFFO_COGNITO_REGION", "us-east-1")
-
-        # No dependency override — /identity should work without auth
-        app.dependency_overrides.clear()
-        client = TestClient(app)
-
-        resp = client.get("/identity")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["userPoolId"] == "us-east-1_test123"
-        assert data["clientId"] == "test-client-456"
-        assert data["region"] == "us-east-1"
-
-    def test_identity_route_handles_missing_env_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When env vars are missing, /identity returns empty strings (no crash)."""
-        monkeypatch.delenv("BIFFO_COGNITO_USER_POOL_ID", raising=False)
-        monkeypatch.delenv("BIFFO_COGNITO_CLIENT_ID", raising=False)
-        monkeypatch.delenv("BIFFO_COGNITO_REGION", raising=False)
-
-        app.dependency_overrides.clear()
-        client = TestClient(app)
-
-        resp = client.get("/identity")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["userPoolId"] == ""
-        assert data["clientId"] == ""
-        assert data["region"] == ""
+    assert resp.status_code == 404
 
 
 def test_exposes_an_asgi_app_not_a_lambda_handler() -> None:
