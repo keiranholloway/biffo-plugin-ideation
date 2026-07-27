@@ -20,11 +20,27 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+// Matches StartSessionRequest.seed_idea's max_length server-side, so an
+// over-long deep-link is trimmed in the box the founder can still edit
+// rather than 422-ing when they hit Start.
+const MAX_SEED_LENGTH = 16_000
+
+// Idea Scout deep-links a candidate here as ?seed=… so the founder can
+// pressure-test it. Ordinary untrusted text: it only ever becomes the value
+// of a controlled input, and it is never auto-submitted.
+function readSeedParam(): string {
+  if (typeof window === 'undefined') return ''
+  const seed = new URLSearchParams(window.location.search).get('seed')
+  return seed ? seed.slice(0, MAX_SEED_LENGTH) : ''
+}
+
 export default function App() {
   const [api, setApi] = useState<Api | null>(null)
   const [ready, setReady] = useState(false)
   const [view, setView] = useState<View>({ kind: 'new' })
-  const [seed, setSeed] = useState('')
+  // Lazy initialiser: read once, at mount. After this the box belongs to the
+  // founder — editing or clearing it is never overwritten by the param.
+  const [seed, setSeed] = useState(readSeedParam)
   const [session, setSession] = useState<SessionState | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -46,6 +62,15 @@ export default function App() {
       setApi(createApi(() => s.getIdToken().getJwtToken()))
       setReady(true)
     })
+  }, [])
+
+  // Drop ?seed= from the address bar once it has been read, so a refresh
+  // mid-edit doesn't re-prefill over the founder's changes.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('seed')) return
+    url.searchParams.delete('seed')
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
   }, [])
 
   // Fetch the session list once ready.

@@ -839,3 +839,68 @@ describe('App', () => {
     expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
   })
 })
+
+describe('App ?seed= deep-link', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.history.replaceState({}, '', '/ideation/')
+  })
+
+  async function renderWithUrl(search: string) {
+    window.history.replaceState({}, '', `/ideation/${search}`)
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    mockFetch(200, [])
+    render(<App />)
+    return await screen.findByLabelText('Your idea')
+  }
+
+  it('prefills the seed box from ?seed=', async () => {
+    const box = await renderWithUrl('?seed=A%20scheduling%20assistant%20for%20coaches')
+
+    expect(box).toHaveValue('A scheduling assistant for coaches')
+  })
+
+  it('leaves the seed box empty when there is no ?seed=', async () => {
+    const box = await renderWithUrl('')
+
+    expect(box).toHaveValue('')
+  })
+
+  it('truncates an over-long ?seed= to the server-side limit', async () => {
+    const box = await renderWithUrl(`?seed=${'x'.repeat(16_050)}`)
+
+    expect((box as HTMLTextAreaElement).value).toHaveLength(16_000)
+  })
+
+  it('does not auto-start a session from ?seed=', async () => {
+    const fetchSpy = mockFetch(200, [])
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    window.history.replaceState({}, '', '/ideation/?seed=an%20idea')
+
+    render(<App />)
+    await screen.findByLabelText('Your idea')
+
+    // startSession is the only POST this view can make.
+    expect(
+      fetchSpy.mock.calls.some(([, init]) => init?.method === 'POST'),
+    ).toBe(false)
+    // The founder still has to click Start.
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
+  })
+
+  it('strips ?seed= from the URL once read, so a refresh does not re-prefill', async () => {
+    await renderWithUrl('?seed=an%20idea')
+
+    await waitFor(() => {
+      expect(window.location.search).toBe('')
+    })
+  })
+
+  it('does not overwrite the founder editing the prefilled idea', async () => {
+    const box = await renderWithUrl('?seed=an%20idea')
+
+    fireEvent.change(box, { target: { value: 'my own idea' } })
+
+    expect(box).toHaveValue('my own idea')
+  })
+})
