@@ -4,8 +4,15 @@ A FastAPI app mounted by the shared plugin host at
 ``/api/v1/plugins/ideation/admin/*`` — admin-gated (both by the host's own
 group-gate and, defence-in-depth, this app's own require_group("admin"),
 mirroring app.py's founder-facing convention). Proxies Core's admin routes
-for chat-agent management as same-origin routes, and serves the built
-web-admin/ bundle.
+for chat-agent management as same-origin routes, reports the engine's
+effective configuration, and serves the built web-admin/ bundle.
+
+**``/effective-config`` is not a proxy.** Every other route here lists a
+table, and an empty table rendered as "not configured" — which was false,
+because the engine runs on the built-ins in :mod:`ideation.effective_config`
+until an admin stores a row over one (issue #58). It answers from this
+plugin's own code and environment, so it reaches neither Core nor the
+database.
 
 **The model catalog is not proxied here.** Its five CRUD routes are declared
 in ``biffo.plugin.json``'s ``api_routes``, which means Core generates and
