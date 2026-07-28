@@ -108,6 +108,13 @@ class CoreHttpGateway:
                 "status": GATHERING,
                 "turn_count": 0,
                 "challenger_agent_key": challenger_agent_key,
+                # Written explicitly, not defaulted. A plugin table's columns are
+                # NOT NULL with *no server default* — Core's generated migration
+                # DDL does not apply declared defaults — so a column the insert
+                # omits fails the whole row. Leaving this out made every
+                # `POST /sessions` a 500 (#57): the Ideation Engine could not
+                # start a session at all.
+                "deleted": False,
             },
         )
         return _session_from_row(row)

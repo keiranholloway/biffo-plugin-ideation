@@ -8,6 +8,8 @@ any network, signing, or a live Core.
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from typing import Any
 
 from ideation.adapter import CoreHttpGateway, CoreNotFoundError
@@ -95,6 +97,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
         "status": GATHERING,
         "turn_count": 0,
         "challenger_agent_key": CHALLENGER_AGENT_NAME,
+        "deleted": False,
     }
     assert "owner_sub" not in body  # Core stamps the owner from the token, not the body
     assert session.id == "sess-1" and session.owner_sub == "alice"
@@ -402,3 +405,46 @@ def test_session_from_row_falls_back_to_the_built_in_challenger_when_missing():
     )
 
     assert session.challenger_agent_key == CHALLENGER_AGENT_NAME
+
+
+def test_insert_writes_every_column_the_manifest_requires():
+    """A NOT NULL plugin column the insert omits fails the whole row.
+
+    This is the defect in #57, and it took the Ideation Engine down completely:
+    `deleted` was declared `nullable: false`, `create_session` never sent it, and
+    every `POST /sessions` came back 500 from a NotNullViolationError.
+
+    Two things made it survive a green suite. Plugin tables are NOT NULL with
+    **no server default** — Core's generated migration DDL does not apply declared
+    defaults — so the database is the only place the omission shows. And the
+    payload assertion above pinned the body *exactly*, which locked the broken
+    shape in rather than catching it.
+
+    So this derives the expectation from `biffo.plugin.json` instead: every
+    required column must appear in the insert. A column added to the manifest
+    without being written now fails here, at the point it is added.
+    """
+    manifest = json.loads((Path(__file__).resolve().parents[1] / "biffo.plugin.json").read_text())
+    table = next(t for t in manifest["tables"] if t["name"] == "ideation_sessions")
+    required = {c["name"] for c in table["columns"] if c.get("nullable") is False}
+
+    # Core stamps the owner from the forwarded token and rejects a body that
+    # sends one — asking for another founder's row is exactly what that prevents
+    # (ADR-0017 §5), so it is required in the table and must not be in the body.
+    core_owned = {"owner_sub"}
+
+    t = FakeTransport()
+    t.on("POST", _SESSIONS, _row())
+    _run(
+        CoreHttpGateway(t).create_session(
+            owner_sub="alice",
+            seed_idea="an idea",
+            thread_id="th-1",
+            challenger_agent_key=CHALLENGER_AGENT_NAME,
+        )
+    )
+    body = t.call("POST", _SESSIONS)["json"]
+
+    assert sorted(required - core_owned - set(body)) == []
+    # Guards the guard: an empty `required` would make the line above vacuous.
+    assert len(required - core_owned) >= 2
