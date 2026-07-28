@@ -79,6 +79,21 @@ class TestModelResolution:
         assert chat_model() == DEFAULT_CHAT_MODEL
         assert analysis_model() == DEFAULT_ANALYSIS_MODEL
 
+    def test_the_analyst_default_searches_the_web_on_a_slug_openrouter_serves(self) -> None:
+        # Two separate regressions, both silent, both only visible at runtime:
+        #
+        # 1. The slug was "anthropic/claude-opus-4-8" — hyphenated, and absent
+        #    from every one of the 367 models OpenRouter lists. The challenger's
+        #    "claude-sonnet-4" IS served, so chat worked and only the report was
+        #    broken, which read as flakiness rather than a bad model id.
+        # 2. Research depended on the web_search registry tool, which a
+        #    deployment without a Brave credential never offers — and dev's is the
+        #    empty string. Without :online the analyst invents competitors.
+        assert DEFAULT_ANALYSIS_MODEL.endswith(":online")
+        base = DEFAULT_ANALYSIS_MODEL.removesuffix(":online")
+        assert base == "anthropic/claude-opus-4.8"
+        assert "-4-8" not in base, "the OpenRouter slug is dotted, not hyphenated"
+
     def test_the_environment_overrides_the_built_in_models(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

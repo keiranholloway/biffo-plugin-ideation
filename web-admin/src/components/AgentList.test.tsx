@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 
 import { AgentList } from './AgentList'
 import type { BuiltinAgent, ChatAgent } from '../lib/api'
@@ -131,5 +131,34 @@ describe('AgentList', () => {
     expect(
       screen.getByText('No agents stored, and no built-in defaults reported.'),
     ).toBeInTheDocument()
+  })
+
+  // ── a stored prompt has to be reachable, or storing one freezes it ─────────
+
+  it('shows the prompt a stored row is running, not only a built-in one', () => {
+    render(<AgentList agents={mockAgents} builtins={[]} {...noopProps()} />)
+
+    expect(screen.getByText('You are a test agent')).toBeInTheDocument()
+  })
+
+  it('lets the stored prompt be edited and saved', () => {
+    const props = noopProps()
+    render(<AgentList agents={mockAgents} builtins={[]} {...props} />)
+
+    fireEvent.click(screen.getAllByText('Edit')[0])
+
+    // Storing a copy overrides the built-in constant, so definitions.py no
+    // longer reaches the runtime for this agent. If the form omits the prompt,
+    // nothing anywhere can change it.
+    const box = screen.getByLabelText(/System prompt/i) as HTMLTextAreaElement
+    expect(box.value).toBe('You are a test agent')
+
+    fireEvent.change(box, { target: { value: 'Rewritten by an admin' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    expect(props.onUpdate).toHaveBeenCalledWith(
+      'agent-1',
+      expect.objectContaining({ system_prompt: 'Rewritten by an admin' }),
+    )
   })
 })

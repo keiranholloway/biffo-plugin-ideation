@@ -42,7 +42,19 @@ from .definitions import (
 CHAT_MODEL_ENV = "IDEATION_CHAT_MODEL"
 ANALYSIS_MODEL_ENV = "IDEATION_ANALYSIS_MODEL"
 DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4"
-DEFAULT_ANALYSIS_MODEL = "anthropic/claude-opus-4-8"
+# ``:online`` is OpenRouter's web-search suffix: the provider runs the search and
+# injects the results, so the analyst researches for real without this deployment
+# needing a Brave credential. It is in the *default* deliberately — competitive
+# research is the point of the analyst, and an environment that silently falls
+# back to the model's parametric recall invents competitors and their URLs.
+# Costs $0.001–$0.005 per analysis run on top of tokens.
+#
+# The slug is dotted: ``claude-opus-4.8``. It was ``claude-opus-4-8`` here, which
+# is not a model OpenRouter serves (it is absent from all 367 in its /models
+# list), so every analysis run was made against a nonexistent model while the
+# challenger's valid ``claude-sonnet-4`` kept working — which is why chat ran and
+# only the report was broken.
+DEFAULT_ANALYSIS_MODEL = "anthropic/claude-opus-4.8:online"
 
 #: ``source`` values on the payloads below — where a value actually came from.
 SOURCE_BUILT_IN = "built-in"

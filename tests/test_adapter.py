@@ -223,8 +223,10 @@ def test_request_analysis_reads_the_thread_then_creates_the_run():
 
     assert run_id == "run-9"
     body = t.call("POST", _RUNS)["json"]
-    # the analyst def carries only registry tools; the report is an OUTPUT tool
-    assert body["definition_snapshot"]["tools"] == ["web_search"]
+    # No registry tools: web_search is dropped on any deployment without a Brave
+    # credential, so research rides on the model slug's :online suffix instead.
+    # The report is an OUTPUT tool and was never in here.
+    assert "tools" not in body["definition_snapshot"]
     assert (
         body["definition_snapshot"]["output_tools"][0]["function"]["name"]
         == "submit_ideation_report"

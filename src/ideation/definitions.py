@@ -157,8 +157,11 @@ candid co-founder, not a cheerleader. Name the single biggest risk plainly.
 
 Work in this order:
 1. Restate the crisp problem and exactly who has it.
-2. Research the competitive landscape with the web_search tool: who already
-   solves this (direct and adjacent), and where each is weak.
+2. Research the competitive landscape using the web results supplied to you:
+   who already solves this (direct and adjacent), and where each is weak. Cite
+   what you actually found. If no web results were supplied, say so plainly in
+   the rationale and mark the competitive picture as unverified — do NOT recall
+   competitors or URLs from memory and present them as research.
 3. Assess build-vs-buy: could the founder buy, partner or assemble this from
    existing tools instead of building? Be specific.
 4. Score viability, build complexity, economic moat and market fit — each 1
@@ -196,15 +199,23 @@ def analyst_definition(*, model: str, instructions: str = ANALYST_INSTRUCTIONS) 
     admin-editable prompt when one is configured, falling back to this default
     otherwise (e.g. before an admin has ever set one).
 
-    ``tools`` names only **registry** tools (``web_search``); the report tool is an
-    *output tool* — offered to the model via the run's ``output_tools`` (see
-    :func:`report_tool_schema`), never resolved against the runtime registry. Putting
-    ``submit_ideation_report`` in ``tools`` would fail the run as an unknown tool
-    (ADR-0017 §5 / agent-runtime tool registry)."""
+    Search is the model's, not ours. This used to declare the ``web_search``
+    registry tool, which is only offered when the deployment has a Brave
+    credential — dev's ``BRAVE_SEARCH_API_KEY_PARAMETER`` is the empty string, so
+    ``web_search_configured()`` was False and the runtime dropped the tool
+    *silently* ("unconfigured means not offered, not broken"). The analyst was
+    told to research with a tool it had never been given, exactly as in
+    biffo-plugin-idea-scout#19. Research now rides on the model slug's
+    ``:online`` suffix, so it works wherever OpenRouter does and cannot be
+    switched off by a missing credential nobody is watching.
+
+    No ``tools`` key is returned at all: the report tool is an *output tool* —
+    offered via the run's ``output_tools`` (see :func:`report_tool_schema`), never
+    resolved against the runtime registry. Putting ``submit_ideation_report`` in
+    ``tools`` would fail the run as an unknown tool (ADR-0017 §5)."""
     return {
         "instructions": instructions,
         "model": model,
-        "tools": ["web_search"],
         "max_turns": 8,
     }
 
