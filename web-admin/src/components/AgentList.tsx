@@ -136,6 +136,22 @@ export function AgentList({
                       onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
                     />
                   </label>
+                  {/*
+                    Without this field a stored row's prompt was editable by
+                    nothing: the form omitted it, and a stored row overrides the
+                    built-in constant, so changing definitions.py no longer
+                    reached the runtime either. "Store a copy to edit" invited
+                    exactly the action that froze the prompt.
+                  */}
+                  <label>
+                    System prompt:
+                    <textarea
+                      className="admin-prompt-input"
+                      rows={14}
+                      value={editForm.system_prompt ?? ''}
+                      onChange={(e) => setEditForm({ ...editForm, system_prompt: e.target.value })}
+                    />
+                  </label>
                   <label>
                     <input
                       type="checkbox"
@@ -180,6 +196,13 @@ export function AgentList({
                         {row.agent.active ? 'Active' : 'Inactive'}
                       </span>
                     </p>
+                    {/* Built-in rows have shown their prompt since #60; stored
+                        rows did not, so storing a copy made the prompt that is
+                        actually running less visible than the one it replaced. */}
+                    <details>
+                      <summary>System prompt (in use)</summary>
+                      <pre className="admin-prompt">{row.agent.system_prompt}</pre>
+                    </details>
                   </div>
                   <div className="admin-list-actions">
                     <button onClick={() => handleEdit(row.agent)} className="admin-btn-secondary">

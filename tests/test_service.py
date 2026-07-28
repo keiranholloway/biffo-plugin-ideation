@@ -320,7 +320,7 @@ class TestFinaliseAndReport:
         req = core.analysis_requests[0]
         assert req["thread_id"] == core.sessions[sid].thread_id
         assert req["output_tool"]["function"]["name"] == REPORT_TOOL_NAME
-        assert "web_search" in req["definition"]["tools"]
+        assert "tools" not in req["definition"]
 
     def test_finalise_uses_the_live_analyst_config_when_set(self) -> None:
         core = FakeCore()

@@ -300,3 +300,18 @@ p {
   max-height: 20rem;
   overflow-y: auto;
 }
+
+/* The prompt is the longest field on the form by an order of magnitude, so it
+   gets a monospace box that shows whitespace faithfully — a prompt edited in a
+   proportional single-line input is one where trailing spaces and line breaks
+   are invisible. */
+.admin-prompt-input {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  resize: vertical;
+}

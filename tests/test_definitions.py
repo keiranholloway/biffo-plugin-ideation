@@ -49,15 +49,21 @@ def test_challenger_is_a_single_turn_conversation_agent() -> None:
 
 
 def test_analyst_researches_then_returns_structured_output() -> None:
-    d = analyst_definition(model="anthropic/claude-opus-4-8")
-    # `tools` names only registry tools; the report is an OUTPUT tool, offered via
-    # output_tools, never resolved against the registry (would fail the run).
-    assert d["tools"] == ["web_search"]
-    assert REPORT_TOOL_NAME not in d["tools"]
+    d = analyst_definition(model="anthropic/claude-opus-4.8:online")
+    # No registry tools at all. web_search is only offered when the deployment has
+    # a Brave credential; dev has none, so declaring it got the tool dropped
+    # silently and left the analyst instructed to use something it never had.
+    # Search now rides on the model slug's :online suffix instead.
+    assert "tools" not in d
+    assert REPORT_TOOL_NAME not in d.get("tools", [])
     assert report_tool_schema()["function"]["name"] == REPORT_TOOL_NAME
     instr = d["instructions"].lower()
     assert "build-vs-buy" in instr
     assert "competitive landscape" in instr
+    # The prompt must not name a tool the runtime does not offer, and must forbid
+    # passing off recalled competitors as research when no results arrive.
+    assert "web_search" not in instr
+    assert "unverified" in instr
 
 
 def test_report_tool_schema_is_the_report_model() -> None:
