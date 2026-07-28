@@ -197,3 +197,14 @@ def test_opts_into_live_chat_agent_registry() -> None:
     # The manifest declares chat_agents_dynamic: true to use Core's live,
     # DB-backed chat-agent registry instead of the frozen-at-deploy static one.
     assert _manifest()["chat_agents_dynamic"] is True
+
+
+def test_declares_no_static_chat_agents_beside_the_dynamic_flag() -> None:
+    # Core's register_plugin_chat_agents() skips a manifest outright when
+    # chat_agents_dynamic is set, so a chat_agents block here is never read.
+    # It carried a full second copy of CHALLENGER_INSTRUCTIONS: two prompts,
+    # one live and one unreachable, with nothing keeping them equal. They were
+    # still byte-identical when the block was removed, so this guards against a
+    # latent drift rather than a realised one — but the copy that would have
+    # drifted is the one no test could have caught, because nothing executes it.
+    assert "chat_agents" not in _manifest()
