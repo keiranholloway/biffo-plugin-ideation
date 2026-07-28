@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { getCurrentSession } from './lib/auth'
 import { ApiError, createApi, type Agent, type Api, type Report, type SessionState, type SessionSummary } from './lib/api'
+import { isFounder, REQUIRED_GROUP } from './lib/roles'
 import { ReportCard } from './components/ReportCard'
 import { Sidebar } from './components/Sidebar'
 
@@ -37,6 +38,10 @@ function readSeedParam(): string {
 export default function App() {
   const [api, setApi] = useState<Api | null>(null)
   const [ready, setReady] = useState(false)
+  // Signed in, but not in the manifest's declared group. Distinct from "signed
+  // out" (which redirects to the portal login) — re-authenticating would not
+  // help, so say so instead of bouncing them round a loop.
+  const [notPermitted, setNotPermitted] = useState(false)
   const [view, setView] = useState<View>({ kind: 'new' })
   // Lazy initialiser: read once, at mount. After this the box belongs to the
   // founder — editing or clearing it is never overwritten by the param.
@@ -53,10 +58,19 @@ export default function App() {
   const [agentKey, setAgentKey] = useState<string>('')
 
   // Read the shared portal session; no session → redirect to the portal login.
+  // A session that is not in the declared group never gets an API client at all
+  // — the client-side half of `user_frontend.required_group` (ADR-0018 §2). The
+  // server enforces the same group independently (see lib/roles.ts); this only
+  // saves a non-founder from a UI where every action returns 403.
   useEffect(() => {
     void getCurrentSession().then((s) => {
       if (!s) {
         window.location.href = `/login?return_to=${encodeURIComponent('/ideation/')}`
+        return
+      }
+      if (!isFounder(s)) {
+        setNotPermitted(true)
+        setReady(true)
         return
       }
       setApi(createApi(() => s.getIdToken().getJwtToken()))
@@ -226,6 +240,21 @@ export default function App() {
   }
 
   if (!ready) return <main className="ide">Loading…</main>
+
+  if (notPermitted) {
+    return (
+      <main className="ide ide-not-permitted">
+        <h1>Ideation Engine</h1>
+        <p>
+          This area is available to members of the <code>{REQUIRED_GROUP}</code> group only.
+        </p>
+        <p>
+          Your account is signed in but not in that group, so the Ideation Engine will not load.
+          Ask an administrator if you think that is wrong.
+        </p>
+      </main>
+    )
+  }
 
   const activeSessionId = view.kind === 'live' || view.kind === 'report' ? view.sessionId : null
 

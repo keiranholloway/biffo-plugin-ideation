@@ -16,10 +16,14 @@ function mockFetch(status: number, body: unknown) {
   } as Response)
 }
 
-function createMockSession() {
+// A real Cognito ID token carries group membership in `cognito:groups`; the
+// default here is a founder, because that is what every other test in this file
+// is about. Pass explicit groups to exercise the gate itself.
+function createMockSession(groups: unknown = ['founder']) {
   return {
     getIdToken: () => ({
       getJwtToken: () => 'test-token',
+      payload: { 'cognito:groups': groups },
     }),
   } as unknown as CognitoUserSession
 }
@@ -837,6 +841,67 @@ describe('App', () => {
 
     // Verify the live chat view is still visible
     expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+  })
+})
+
+// The reporter's route in keiranholloway/biffo-platform-app#4: navigate straight
+// to https://dev.biffo.io/ideation/ rather than going through the dashboard,
+// which has its own (client-side) gate. The static shell is served publicly from
+// S3/CloudFront and cannot check a group, so the SPA has to do the bounce that
+// `user_frontend.required_group` declares (ADR-0018 §2). This is UX only — the
+// server enforces the same group at API Gateway, at the shared plugin host's
+// group_gate, and again in the plugin's own require_group("founder").
+describe('App founder-group gate (direct navigation to /ideation/)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.history.replaceState({}, '', '/ideation/')
+  })
+
+  it('refuses to render the engine for a signed-in user with no founder group', async () => {
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession([]))
+    const fetchSpy = mockFetch(200, [])
+
+    render(<App />)
+
+    expect(await screen.findByText(/available to members of the/i)).toBeInTheDocument()
+    // The chat UI must not be there at all — not merely error out per action.
+    expect(screen.queryByLabelText('Your idea')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
+    // And it must not have called the API on their behalf.
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('refuses a user in some other group (the group is matched exactly)', async () => {
+    // `user_ingress.required_group` is literally "founder". Admitting an admin
+    // here would just move the server's 403 from the front door to every button.
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['admin', 'staff']))
+    mockFetch(200, [])
+
+    render(<App />)
+
+    expect(await screen.findByText(/available to members of the/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Your idea')).not.toBeInTheDocument()
+  })
+
+  it('refuses a token whose cognito:groups claim is not a list of groups', async () => {
+    // `undefined` would hit createMockSession's default, so use an explicit
+    // malformed value; roles.test.ts covers the wholly-absent claim.
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(null))
+    mockFetch(200, [])
+
+    render(<App />)
+
+    expect(await screen.findByText(/available to members of the/i)).toBeInTheDocument()
+  })
+
+  it('still renders the engine for a founder', async () => {
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['founder']))
+    mockFetch(200, [])
+
+    render(<App />)
+
+    expect(await screen.findByLabelText('Your idea')).toBeInTheDocument()
+    expect(screen.queryByText(/available to members of the/i)).not.toBeInTheDocument()
   })
 })
 
