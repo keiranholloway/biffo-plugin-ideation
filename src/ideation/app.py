@@ -16,8 +16,6 @@ Mangum handler.
 
 from __future__ import annotations
 
-import os
-
 from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI
 from fastapi.requests import Request
@@ -26,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpGateway
 from .definitions import MAX_TURNS, MIN_TURNS
+from .effective_config import analysis_model, chat_model
 from .models import ANALYSING, GATHERING
 from .service import (
     AnalysisFailedError,
@@ -39,8 +38,11 @@ from .service import (
 )
 from .transport import CoreTransport
 
-_CHAT_MODEL = os.environ.get("IDEATION_CHAT_MODEL", "anthropic/claude-sonnet-4")
-_ANALYSIS_MODEL = os.environ.get("IDEATION_ANALYSIS_MODEL", "anthropic/claude-opus-4-8")
+#: The models this app runs on. Resolved by ``effective_config`` rather than
+#: read from the environment here, so the admin panel's "what is actually in
+#: use" view and this request path cannot disagree (issue #58).
+_CHAT_MODEL = chat_model()
+_ANALYSIS_MODEL = analysis_model()
 
 #: The founder gate — verifies the shared-Cognito JWT and requires the group. The
 #: verified user carries its raw token, forwarded to Core by the transport.

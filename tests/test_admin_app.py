@@ -159,6 +159,55 @@ class TestModelCatalogIsNotProxiedHere:
         assert not ideation.admin_app._CHAT_AGENTS_BASE.startswith("/api/v1/plugins/")
 
 
+class TestEffectiveConfigRoute:
+    """The route that lets the panel answer "what is actually in use?".
+
+    Every other route here lists a *table*. On an empty table that renders as
+    "No agents defined yet", which is true of the table and false of the engine
+    — it runs on built-in prompts and models until an admin overrides them
+    (issue #58). This route reports those built-ins.
+    """
+
+    def test_reports_the_agents_the_engine_falls_back_to(
+        self, client: TestClient, core_mock: AsyncMock
+    ) -> None:
+        from ideation.definitions import (
+            ANALYST_AGENT_NAME,
+            ANALYST_INSTRUCTIONS,
+            CHALLENGER_AGENT_NAME,
+            CHALLENGER_INSTRUCTIONS,
+        )
+
+        resp = client.get("/effective-config")
+
+        assert resp.status_code == 200
+        agents = resp.json()["agents"]
+        assert [a["agent_key"] for a in agents] == [CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME]
+        # The real prompt text, not a placeholder: an admin about to override a
+        # default has to be able to see what they are replacing.
+        assert agents[0]["system_prompt"] == CHALLENGER_INSTRUCTIONS
+        assert agents[1]["system_prompt"] == ANALYST_INSTRUCTIONS
+
+    def test_reports_the_models_in_use_and_where_each_came_from(
+        self, client: TestClient, core_mock: AsyncMock
+    ) -> None:
+        resp = client.get("/effective-config")
+
+        assert resp.status_code == 200
+        models = resp.json()["models"]
+        assert [m["purpose"] for m in models] == ["chat", "analysis"]
+        assert all(m["model_id"] for m in models)
+        assert all(m["source"] in {"built-in", "env"} for m in models)
+
+    def test_costs_no_core_round_trip(self, client: TestClient, core_mock: AsyncMock) -> None:
+        """The answer is entirely this plugin's own code and environment, so it
+        neither adds a hop nor fails on a cold Core."""
+        resp = client.get("/effective-config")
+
+        assert resp.status_code == 200
+        core_mock.assert_not_called()
+
+
 class TestAuthGating:
     """Test that routes are properly gated by the admin group."""
 
@@ -174,6 +223,15 @@ class TestAuthGating:
         assert monkeypatched.get("/chat-agents/key").status_code == 401
         assert monkeypatched.put("/chat-agents/key", json={}).status_code == 401
         assert monkeypatched.delete("/chat-agents/key").status_code == 401
+
+    def test_effective_config_requires_admin_group_too(self) -> None:
+        """It returns system_prompt text. ADR-0016 §1 allows that for an admin —
+        Core's own /chat-agents admin routes already do — and only for an admin,
+        so this route must not be the one that leaks it."""
+        app.dependency_overrides.clear()
+        unauthenticated = TestClient(app, raise_server_exceptions=False)
+
+        assert unauthenticated.get("/effective-config").status_code == 401
 
 
 class TestCoreRequestTimeout:

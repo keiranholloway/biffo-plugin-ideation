@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 
 import { getCurrentSession } from './lib/auth'
-import { createApi, type Api, type ChatAgent, type ModelCatalogEntry } from './lib/api'
+import {
+  createApi,
+  type Api,
+  type BuiltinAgent,
+  type ChatAgent,
+  type EffectiveModel,
+  type ModelCatalogEntry,
+} from './lib/api'
 import { AgentList } from './components/AgentList'
 import { AgentForm } from './components/AgentForm'
 import { ModelCatalogList } from './components/ModelCatalogList'
@@ -20,6 +27,11 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('agents')
   const [agents, setAgents] = useState<ChatAgent[]>([])
   const [catalogEntries, setCatalogEntries] = useState<ModelCatalogEntry[]>([])
+  // What the engine is running on whether or not anything is stored. Without
+  // this the panel reports table contents and calls an empty table "not
+  // configured", which is the opposite of the truth (issue #58).
+  const [builtinAgents, setBuiltinAgents] = useState<BuiltinAgent[]>([])
+  const [effectiveModels, setEffectiveModels] = useState<EffectiveModel[]>([])
   const [error, setError] = useState<string | null>(null)
 
   // Read the shared portal session; no session → show a message.
@@ -37,9 +49,21 @@ export default function App() {
   // Fetch agents and catalog when ready
   useEffect(() => {
     if (!api) return
+    void refreshEffectiveConfig()
     void refreshAgents()
     void refreshCatalog()
   }, [api])
+
+  async function refreshEffectiveConfig() {
+    if (!api) return
+    try {
+      const config = await api.getEffectiveConfig()
+      setBuiltinAgents(config.agents)
+      setEffectiveModels(config.models)
+    } catch (e) {
+      setError(`Failed to load effective configuration: ${errorText(e)}`)
+    }
+  }
 
   async function refreshAgents() {
     if (!api) return
@@ -69,6 +93,29 @@ export default function App() {
       await refreshAgents()
     } catch (e) {
       setError(`Failed to create agent: ${errorText(e)}`)
+    }
+  }
+
+  /** Store a built-in default verbatim so it becomes editable. Spelled out in
+   * the confirm, because this is the moment an invisible default turns into a
+   * row that overrides it — the trap issue #58 names. */
+  async function handleStoreBuiltin(builtin: BuiltinAgent) {
+    if (!api) return
+    if (
+      !window.confirm(
+        `Store "${builtin.agent_key}" as an editable row?\n\n` +
+          'It copies the built-in default exactly, so nothing changes now. ' +
+          'From then on the stored row is what runs, and every edit you make ' +
+          'here overrides the built-in default.',
+      )
+    )
+      return
+    setError(null)
+    try {
+      await api.storeBuiltinAgent(builtin)
+      await refreshAgents()
+    } catch (e) {
+      setError(`Failed to store default: ${errorText(e)}`)
     }
   }
 
@@ -174,8 +221,10 @@ export default function App() {
           <AgentForm onSubmit={handleCreateAgent} />
           <AgentList
             agents={agents}
+            builtins={builtinAgents}
             onUpdate={handleUpdateAgent}
             onDelete={handleDeleteAgent}
+            onStoreBuiltin={handleStoreBuiltin}
           />
         </section>
       )}
@@ -186,6 +235,7 @@ export default function App() {
           <ModelCatalogForm onSubmit={handleCreateCatalogEntry} />
           <ModelCatalogList
             entries={catalogEntries}
+            effectiveModels={effectiveModels}
             currentDefault={currentDefault}
             onSetDefault={handleSetDefault}
             onDelete={handleDeleteCatalogEntry}

@@ -4,8 +4,15 @@ A FastAPI app mounted by the shared plugin host at
 ``/api/v1/plugins/ideation/admin/*`` — admin-gated (both by the host's own
 group-gate and, defence-in-depth, this app's own require_group("admin"),
 mirroring app.py's founder-facing convention). Proxies Core's admin routes
-for chat-agent management as same-origin routes, and serves the built
-web-admin/ bundle.
+for chat-agent management as same-origin routes, reports the engine's
+effective configuration, and serves the built web-admin/ bundle.
+
+**``/effective-config`` is not a proxy.** Every other route here lists a
+table, and an empty table rendered as "not configured" — which was false,
+because the engine runs on the built-ins in :mod:`ideation.effective_config`
+until an admin stores a row over one (issue #58). It answers from this
+plugin's own code and environment, so it reaches neither Core nor the
+database.
 
 **The model catalog is not proxied here.** Its five CRUD routes are declared
 in ``biffo.plugin.json``'s ``api_routes``, which means Core generates and
@@ -35,6 +42,8 @@ import httpx
 from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+
+from .effective_config import builtin_chat_agents, effective_models
 
 require_admin = require_group("admin")
 
@@ -66,6 +75,28 @@ async def _core_request(
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return resp.json() if resp.content else None
+
+
+# ── effective configuration ──────────────────────────────────────────────────
+
+
+@app.get("/effective-config")
+async def read_effective_config(
+    _admin: ForwardedUser = Depends(require_admin),
+) -> dict[str, Any]:
+    """What the engine is running on right now, whether or not it is stored.
+
+    The other routes here list *tables*. On an empty table that reads as "not
+    configured", which is false: the engine runs on the built-ins in
+    :mod:`ideation.effective_config`, and creating a row **overrides** one of
+    them rather than filling a void (issue #58). This route is what lets the
+    admin UI say so.
+
+    It touches neither Core nor the database — the answer is entirely this
+    plugin's own code and environment — so it costs no extra hop and cannot
+    fail on a cold Core.
+    """
+    return {"agents": builtin_chat_agents(), "models": effective_models()}
 
 
 # ── chat agents ──────────────────────────────────────────────────────────────

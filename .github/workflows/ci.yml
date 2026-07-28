@@ -46,3 +46,29 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run test
       - run: pnpm run build
+
+  # web-admin/ had no CI at all: its tests, types and build were never run by
+  # anything, so a broken admin panel reached dev.biffo.io with the PR green.
+  # It is a separate pnpm project with its own lockfile (not a workspace member
+  # of web/), so it needs its own job rather than another step above.
+  admin-frontend:
+    name: Admin frontend (lint, types, test, build)
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: web-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-admin/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-workspace
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+      - run: pnpm run test
+      - run: pnpm run build
