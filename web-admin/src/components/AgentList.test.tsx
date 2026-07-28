@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 import { AgentList } from './AgentList'
-import type { ChatAgent } from '../lib/api'
+import type { BuiltinAgent, ChatAgent } from '../lib/api'
 
 describe('AgentList', () => {
   const mockAgents: ChatAgent[] = [
@@ -32,11 +32,24 @@ describe('AgentList', () => {
     },
   ]
 
-  it('renders a list of agents', () => {
-    const onUpdate = vi.fn()
-    const onDelete = vi.fn()
+  const mockBuiltins: BuiltinAgent[] = [
+    {
+      agent_key: 'ideation-challenger',
+      agent_name: 'ideation-challenger',
+      role: 'challenger',
+      system_prompt: 'You are Biffo’s Ideation partner',
+      model: 'anthropic/claude-sonnet-4',
+      required_group: 'founder',
+      active: true,
+    },
+  ]
 
-    render(<AgentList agents={mockAgents} onUpdate={onUpdate} onDelete={onDelete} />)
+  function noopProps() {
+    return { onUpdate: vi.fn(), onDelete: vi.fn(), onStoreBuiltin: vi.fn() }
+  }
+
+  it('renders a list of agents', () => {
+    render(<AgentList agents={mockAgents} builtins={[]} {...noopProps()} />)
 
     expect(screen.getByText('Test Agent 1')).toBeInTheDocument()
     expect(screen.getByText('Test Agent 2')).toBeInTheDocument()
@@ -44,36 +57,79 @@ describe('AgentList', () => {
     expect(screen.getByText('agent-2')).toBeInTheDocument()
   })
 
-  it('shows empty state when no agents', () => {
-    const onUpdate = vi.fn()
-    const onDelete = vi.fn()
-
-    render(<AgentList agents={[]} onUpdate={onUpdate} onDelete={onDelete} />)
-
-    expect(screen.getByText('No agents defined yet.')).toBeInTheDocument()
-  })
-
   it('renders active and inactive badges', () => {
-    const onUpdate = vi.fn()
-    const onDelete = vi.fn()
-
-    render(<AgentList agents={mockAgents} onUpdate={onUpdate} onDelete={onDelete} />)
+    render(<AgentList agents={mockAgents} builtins={[]} {...noopProps()} />)
 
     const badges = screen.getAllByText(/Active|Inactive/)
     expect(badges.length).toBeGreaterThan(0)
   })
 
   it('calls onDelete when delete button is clicked', () => {
-    const onUpdate = vi.fn()
-    const onDelete = vi.fn()
-
+    const props = noopProps()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
-    render(<AgentList agents={mockAgents} onUpdate={onUpdate} onDelete={onDelete} />)
+    render(<AgentList agents={mockAgents} builtins={[]} {...props} />)
 
     const deleteButtons = screen.getAllByText('Delete')
     deleteButtons[0].click()
 
-    expect(onDelete).toHaveBeenCalledWith('agent-1')
+    expect(props.onDelete).toHaveBeenCalledWith('agent-1')
+  })
+
+  // ── issue #58: an empty table is not an unconfigured engine ────────────────
+
+  it('shows the built-in defaults instead of claiming nothing is defined', () => {
+    render(<AgentList agents={[]} builtins={mockBuiltins} {...noopProps()} />)
+
+    // The old copy — "No agents defined yet." — described the table and
+    // contradicted the engine, which runs on the default below.
+    expect(screen.queryByText('No agents defined yet.')).not.toBeInTheDocument()
+    // Name and key, so two matches.
+    expect(screen.getAllByText('ideation-challenger').length).toBeGreaterThan(0)
+    expect(screen.getByText('Default — not stored')).toBeInTheDocument()
+    expect(screen.getByText(/running on the built-in defaults/)).toBeInTheDocument()
+  })
+
+  it('shows the prompt a built-in default is actually running', () => {
+    render(<AgentList agents={[]} builtins={mockBuiltins} {...noopProps()} />)
+
+    expect(screen.getByText('You are Biffo’s Ideation partner')).toBeInTheDocument()
+    expect(screen.getByText('anthropic/claude-sonnet-4')).toBeInTheDocument()
+  })
+
+  it('offers to store a built-in default rather than only "Add New Agent"', () => {
+    const props = noopProps()
+
+    render(<AgentList agents={[]} builtins={mockBuiltins} {...props} />)
+
+    screen.getByText('Store a copy to edit').click()
+
+    expect(props.onStoreBuiltin).toHaveBeenCalledWith(mockBuiltins[0])
+  })
+
+  it('marks a stored row that overrides a built-in as an override', () => {
+    const stored: ChatAgent = { ...mockAgents[0], agent_key: 'ideation-challenger' }
+
+    render(<AgentList agents={[stored]} builtins={mockBuiltins} {...noopProps()} />)
+
+    expect(screen.getByText('Stored — overrides the built-in default')).toBeInTheDocument()
+    // Not listed twice: the stored row replaces the default, it does not sit
+    // beside it.
+    expect(screen.queryByText('Default — not stored')).not.toBeInTheDocument()
+  })
+
+  it('marks a stored row with no built-in behind it as merely stored', () => {
+    render(<AgentList agents={[mockAgents[0]]} builtins={mockBuiltins} {...noopProps()} />)
+
+    expect(screen.getByText('Stored')).toBeInTheDocument()
+    expect(screen.getByText('Default — not stored')).toBeInTheDocument()
+  })
+
+  it('falls back to an empty state only when there is genuinely nothing', () => {
+    render(<AgentList agents={[]} builtins={[]} {...noopProps()} />)
+
+    expect(
+      screen.getByText('No agents stored, and no built-in defaults reported.'),
+    ).toBeInTheDocument()
   })
 })

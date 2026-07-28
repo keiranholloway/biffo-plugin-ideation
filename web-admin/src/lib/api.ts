@@ -46,6 +46,39 @@ export interface ModelCatalogEntry {
   is_default: boolean
 }
 
+// ── effective configuration ─────────────────────────────────────────────────
+//
+// The lists above are *tables*. The engine does not stop working when they are
+// empty — it runs on built-in prompts and models, so an empty table rendered as
+// "nothing configured" told an admin the opposite of the truth, and "Add New
+// Agent" silently overrode an invisible default (issue #58). /effective-config
+// reports those built-ins so the panel can show what is actually in use.
+
+/** A built-in agent the engine falls back to when no stored row overrides it. */
+export interface BuiltinAgent {
+  agent_key: string
+  agent_name: string
+  role: string
+  system_prompt: string
+  model: string
+  required_group: string
+  active: boolean
+}
+
+/** A model actually reaching the runtime, and where its value came from. */
+export interface EffectiveModel {
+  purpose: string
+  label: string
+  model_id: string
+  source: 'built-in' | 'env'
+  env_var: string
+}
+
+export interface EffectiveConfig {
+  agents: BuiltinAgent[]
+  models: EffectiveModel[]
+}
+
 export type Api = ReturnType<typeof createApi>
 
 export function createApi(getIdToken: () => string | null) {
@@ -72,10 +105,16 @@ export function createApi(getIdToken: () => string | null) {
   }
 
   return {
+    // What the engine is running on, stored or not
+    getEffectiveConfig: () => request<EffectiveConfig>('GET', '/effective-config'),
+
     // Chat agents (5 routes)
     listChatAgents: () => request<ChatAgent[]>('GET', '/chat-agents'),
     createChatAgent: (agent: Omit<ChatAgent, 'agent_key'>) =>
       request<ChatAgent>('POST', '/chat-agents', agent),
+    // Store a built-in default verbatim, so the row that starts overriding it
+    // is a copy of what was already running rather than a new definition.
+    storeBuiltinAgent: (agent: BuiltinAgent) => request<ChatAgent>('POST', '/chat-agents', agent),
     getChatAgent: (agentKey: string) => request<ChatAgent>('GET', `/chat-agents/${agentKey}`),
     updateChatAgent: (agentKey: string, updates: Partial<ChatAgent>) =>
       request<ChatAgent>('PUT', `/chat-agents/${agentKey}`, updates),

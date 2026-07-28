@@ -33,45 +33,29 @@ import httpx
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent / "src"))
 
-from ideation.definitions import (  # noqa: E402
-    ANALYST_AGENT_NAME,
-    ANALYST_INSTRUCTIONS,
-    CHALLENGER_AGENT_NAME,
-    CHALLENGER_INSTRUCTIONS,
-)
+from ideation.effective_config import builtin_chat_agents  # noqa: E402
 
 _PLUGIN_NAME = "ideation"
-_DEFAULT_CHAT_MODEL = os.environ.get("IDEATION_CHAT_MODEL", "anthropic/claude-sonnet-4")
-_DEFAULT_ANALYSIS_MODEL = os.environ.get("IDEATION_ANALYSIS_MODEL", "anthropic/claude-opus-4-8")
+
+
+def _builtin(role: str) -> dict:
+    """The built-in default for one role — the single source those defaults are
+    named in (``ideation.effective_config``), so seeding stores a copy of what
+    is already running rather than a second, drifting definition of it."""
+    return next(agent for agent in builtin_chat_agents() if agent["role"] == role)
 
 
 def build_payload() -> dict:
     """The exact challenger seed row — must match today's hardcoded static
     registration (biffo.plugin.json's chat_agents entry) so cutover changes
     nothing observable for founders."""
-    return {
-        "agent_key": CHALLENGER_AGENT_NAME,
-        "agent_name": CHALLENGER_AGENT_NAME,
-        "role": "challenger",
-        "system_prompt": CHALLENGER_INSTRUCTIONS,
-        "model": _DEFAULT_CHAT_MODEL,
-        "required_group": "founder",
-        "active": True,
-    }
+    return _builtin("challenger")
 
 
 def build_analyst_payload() -> dict:
     """The exact analyst seed row — must match today's hardcoded
     ANALYST_INSTRUCTIONS/model so cutover changes nothing observable."""
-    return {
-        "agent_key": ANALYST_AGENT_NAME,
-        "agent_name": ANALYST_AGENT_NAME,
-        "role": "analyst",
-        "system_prompt": ANALYST_INSTRUCTIONS,
-        "model": _DEFAULT_ANALYSIS_MODEL,
-        "required_group": "founder",
-        "active": True,
-    }
+    return _builtin("analyst")
 
 
 def _seed_one(payload: dict, *, core_api_url: str, admin_token: str) -> bool:

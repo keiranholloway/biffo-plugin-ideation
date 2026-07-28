@@ -36,6 +36,8 @@ from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
+from .effective_config import builtin_chat_agents, effective_models
+
 require_admin = require_group("admin")
 
 _CORE_API_URL = os.environ.get("BIFFO_CORE_API_URL", "")
@@ -66,6 +68,28 @@ async def _core_request(
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return resp.json() if resp.content else None
+
+
+# ── effective configuration ──────────────────────────────────────────────────
+
+
+@app.get("/effective-config")
+async def read_effective_config(
+    _admin: ForwardedUser = Depends(require_admin),
+) -> dict[str, Any]:
+    """What the engine is running on right now, whether or not it is stored.
+
+    The other routes here list *tables*. On an empty table that reads as "not
+    configured", which is false: the engine runs on the built-ins in
+    :mod:`ideation.effective_config`, and creating a row **overrides** one of
+    them rather than filling a void (issue #58). This route is what lets the
+    admin UI say so.
+
+    It touches neither Core nor the database — the answer is entirely this
+    plugin's own code and environment — so it costs no extra hop and cannot
+    fail on a cold Core.
+    """
+    return {"agents": builtin_chat_agents(), "models": effective_models()}
 
 
 # ── chat agents ──────────────────────────────────────────────────────────────

@@ -214,7 +214,10 @@ p {
 .badge-active,
 .badge-inactive,
 .badge-default,
-.badge-not-default {
+.badge-not-default,
+.badge-builtin,
+.badge-env,
+.badge-stored {
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 3px;
@@ -240,4 +243,60 @@ p {
 .badge-not-default {
   background-color: #e2e3e5;
   color: #383d41;
+}
+
+/* Provenance: is this value stored, or a built-in the engine falls back to?
+   The panel used to answer neither, and an empty table read as "unconfigured"
+   while the built-ins drove every request (issue #58). */
+.badge-builtin {
+  background-color: #fff3cd;
+  color: #664d03;
+}
+
+.badge-env {
+  background-color: #cfe2ff;
+  color: #084298;
+}
+
+.badge-stored {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.admin-note {
+  color: #555;
+  background-color: #fff8e6;
+  border-left: 3px solid #ffc107;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.admin-list-item--builtin {
+  border-left: 3px solid #ffc107;
+}
+
+.admin-effective {
+  margin-bottom: 1.5rem;
+}
+
+.admin-effective-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-effective-list li {
+  padding: 0.4rem 0;
+}
+
+.admin-prompt {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background-color: #f6f6f6;
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  max-height: 20rem;
+  overflow-y: auto;
 }

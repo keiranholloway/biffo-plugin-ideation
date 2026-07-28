@@ -1,24 +1,70 @@
-import type { ModelCatalogEntry } from '../lib/api'
+import type { EffectiveModel, ModelCatalogEntry } from '../lib/api'
 
 interface ModelCatalogListProps {
   entries: ModelCatalogEntry[]
+  /** The models actually reaching the runtime, catalog or no catalog. */
+  effectiveModels: EffectiveModel[]
   currentDefault: string | null
   onSetDefault: (entryId: string, currentDefault: string | null) => void
   onDelete: (entryId: string) => void
 }
 
+/**
+ * The models the engine is running on right now. Rendered above the catalog
+ * because the catalog is an admin-curated list of *choices* that nothing in the
+ * request path reads — so an empty catalog never meant "no models", and saying
+ * "No catalog entries yet" and stopping there was the misleading half of issue
+ * #58.
+ */
+function EffectiveModels({ models }: { models: EffectiveModel[] }) {
+  if (models.length === 0) return null
+
+  return (
+    <div className="admin-effective">
+      <h3>Models in use</h3>
+      <p className="admin-note">
+        What the engine runs on today. These are inherited, not catalog entries — adding or
+        removing a catalog entry below does not change them.
+      </p>
+      <ul className="admin-effective-list">
+        {models.map((model) => (
+          <li key={model.purpose}>
+            <strong>{model.label}:</strong> {model.model_id}{' '}
+            <span className={model.source === 'env' ? 'badge-env' : 'badge-builtin'}>
+              {model.source === 'env'
+                ? `from ${model.env_var}`
+                : `built-in default — not stored (set ${model.env_var} to change)`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function ModelCatalogList({
   entries,
+  effectiveModels,
   currentDefault,
   onSetDefault,
   onDelete,
 }: ModelCatalogListProps) {
   if (entries.length === 0) {
-    return <p className="admin-empty">No catalog entries yet.</p>
+    return (
+      <>
+        <EffectiveModels models={effectiveModels} />
+        <p className="admin-empty">
+          No catalog entries stored. The catalog is an optional curated list for admins; the engine
+          is running on the models above.
+        </p>
+      </>
+    )
   }
 
   return (
-    <div className="admin-list">
+    <>
+      <EffectiveModels models={effectiveModels} />
+      <div className="admin-list">
       {entries.map((entry) => (
         <div key={entry.id} className="admin-list-item">
           <div className="admin-list-content">
@@ -56,6 +102,7 @@ export function ModelCatalogList({
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   )
 }
