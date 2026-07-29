@@ -217,7 +217,9 @@ p {
 .badge-not-default,
 .badge-builtin,
 .badge-env,
-.badge-stored {
+.badge-stored,
+.badge-danger,
+.badge-unknown {
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: 3px;
@@ -261,6 +263,26 @@ p {
 .badge-stored {
   background-color: #d4edda;
   color: #155724;
+}
+
+/* Not "no value chosen" but "this path cannot run": with chat_agents_dynamic
+   on, a missing challenger row means Core has nothing to resolve and every
+   chat turn 404s (issue #67). It reads as an outage, not a preference. */
+.badge-danger {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* We could not read the stored rows, which is a different claim from "nothing
+   is stored" — the panel must not turn a cold Core into a false report. */
+.badge-unknown {
+  background-color: #e2e3e5;
+  color: #383d41;
+}
+
+.admin-effective-detail {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.85rem;
 }
 
 .admin-note {

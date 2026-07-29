@@ -188,24 +188,74 @@ class TestEffectiveConfigRoute:
         assert agents[0]["system_prompt"] == CHALLENGER_INSTRUCTIONS
         assert agents[1]["system_prompt"] == ANALYST_INSTRUCTIONS
 
-    def test_reports_the_models_in_use_and_where_each_came_from(
+    def test_reports_the_models_in_use_by_reading_what_is_stored(
         self, client: TestClient, core_mock: AsyncMock
     ) -> None:
+        """The models are resolved against the chat-agent table, not asserted
+        from this plugin's constants. Answering from constants reported a model
+        nothing was running on: the challenger's model comes only from its
+        stored row, because the plugin sends Core none (issue #67)."""
+        from ideation.definitions import ANALYST_AGENT_NAME, CHALLENGER_AGENT_NAME
+
+        core_mock.return_value = [
+            {
+                "agent_key": CHALLENGER_AGENT_NAME,
+                "role": "challenger",
+                "model": "vendor/stored-chat",
+                "active": True,
+            },
+            {
+                "agent_key": ANALYST_AGENT_NAME,
+                "role": "analyst",
+                "model": "vendor/stored-analysis",
+                "active": True,
+            },
+        ]
+
         resp = client.get("/effective-config")
 
         assert resp.status_code == 200
-        models = resp.json()["models"]
-        assert [m["purpose"] for m in models] == ["chat", "analysis"]
-        assert all(m["model_id"] for m in models)
-        assert all(m["source"] in {"built-in", "env"} for m in models)
+        models = {m["purpose"]: m for m in resp.json()["models"]}
+        assert models["chat"]["model_id"] == "vendor/stored-chat"
+        assert models["chat"]["source"] == "stored"
+        assert models["analysis"]["model_id"] == "vendor/stored-analysis"
+        assert models["analysis"]["source"] == "stored"
 
-    def test_costs_no_core_round_trip(self, client: TestClient, core_mock: AsyncMock) -> None:
-        """The answer is entirely this plugin's own code and environment, so it
-        neither adds a hop nor fails on a cold Core."""
+        # ...and it read the chat-agent table to know that.
+        assert core_mock.call_args[0][0] == "GET"
+        assert "/api/v1/admin/plugins/ideation/chat-agents" in core_mock.call_args[0][1]
+
+    def test_a_failed_core_read_degrades_to_unknown_rather_than_erroring(
+        self, client: TestClient, core_mock: AsyncMock
+    ) -> None:
+        """The property the old no-hop version bought is kept explicitly: this
+        route now costs a Core read, but a cold or broken Core must never turn
+        the panel into an error page — it still has to render the prompts, and
+        say honestly that it cannot see the models."""
+        core_mock.side_effect = RuntimeError("Core is cold")
+
         resp = client.get("/effective-config")
 
         assert resp.status_code == 200
-        core_mock.assert_not_called()
+        body = resp.json()
+        assert len(body["agents"]) == 2  # the constants are still answered with no hop
+        assert [m["source"] for m in body["models"]] == ["unknown", "unknown"]
+
+    def test_an_empty_table_is_not_reported_as_the_built_in_chat_model(
+        self, client: TestClient, core_mock: AsyncMock
+    ) -> None:
+        """With chat_agents_dynamic on, no stored challenger row means Core has
+        nothing to resolve and every chat turn 404s. Reporting a plausible
+        built-in model id there hides a broken deployment."""
+        core_mock.return_value = []
+
+        models = {m["purpose"]: m for m in client.get("/effective-config").json()["models"]}
+
+        assert models["chat"]["source"] == "unconfigured"
+        assert models["chat"]["model_id"] is None
+        # The analyst's fallback is real, so it still reports a model.
+        assert models["analysis"]["source"] in {"built-in", "env"}
+        assert models["analysis"]["model_id"]
 
 
 class TestAuthGating:

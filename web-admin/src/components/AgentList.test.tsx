@@ -45,7 +45,15 @@ describe('AgentList', () => {
   ]
 
   function noopProps() {
-    return { onUpdate: vi.fn(), onDelete: vi.fn(), onStoreBuiltin: vi.fn() }
+    return {
+      onUpdate: vi.fn(),
+      onDelete: vi.fn(),
+      onStoreBuiltin: vi.fn(),
+      // Empty catalog: the model field degrades to free text, so these tests
+      // keep exercising the list rather than the picker (ModelSelect has its
+      // own).
+      catalogEntries: [],
+    }
   }
 
   it('renders a list of agents', () => {

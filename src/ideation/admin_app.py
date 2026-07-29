@@ -82,21 +82,45 @@ async def _core_request(
 
 @app.get("/effective-config")
 async def read_effective_config(
-    _admin: ForwardedUser = Depends(require_admin),
+    admin: ForwardedUser = Depends(require_admin),
 ) -> dict[str, Any]:
     """What the engine is running on right now, whether or not it is stored.
 
     The other routes here list *tables*. On an empty table that reads as "not
-    configured", which is false: the engine runs on the built-ins in
+    configured", which is false for the analyst: it runs on the built-ins in
     :mod:`ideation.effective_config`, and creating a row **overrides** one of
     them rather than filling a void (issue #58). This route is what lets the
     admin UI say so.
 
-    It touches neither Core nor the database — the answer is entirely this
-    plugin's own code and environment — so it costs no extra hop and cannot
-    fail on a cold Core.
+    ``agents`` is still answered with no hop — it is this plugin's own
+    constants. ``models`` is not: the challenger's model comes *only* from its
+    stored row, and the analyst's comes from its stored row whenever one
+    exists, so answering from constants alone reported a model that nothing was
+    running on (issue #67). That costs one Core read.
+
+    The property the old no-hop version bought — this route cannot fail on a
+    cold Core — is kept explicitly instead of by not asking: a failed read
+    yields ``source: "unknown"``, never a 5xx. An admin panel that cannot say
+    what is in use is bad; one that shows an error page instead of the built-in
+    prompts is worse.
     """
-    return {"agents": builtin_chat_agents(), "models": effective_models()}
+    stored = await _stored_agents(admin)
+    return {"agents": builtin_chat_agents(), "models": effective_models(stored)}
+
+
+async def _stored_agents(admin: ForwardedUser) -> list[dict[str, Any]] | None:
+    """The stored chat-agent rows, or ``None`` if Core could not be read.
+
+    ``None`` is not "no rows" — it is "we do not know", and
+    :func:`effective_models` renders the two differently on purpose. Collapsing
+    a failed read into an empty list would report "nothing is stored, chat is
+    broken" every time Core cold-started.
+    """
+    try:
+        rows = await _core_request("GET", _CHAT_AGENTS_BASE, admin=admin)
+    except Exception:
+        return None
+    return list(rows) if isinstance(rows, list) else None
 
 
 # ── chat agents ──────────────────────────────────────────────────────────────

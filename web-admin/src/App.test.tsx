@@ -171,9 +171,15 @@ describe('App', () => {
           {
             purpose: 'chat',
             label: 'Challenger (requirement-gathering chat)',
-            model_id: 'anthropic/claude-sonnet-4',
-            source: 'built-in',
+            model_id: null,
+            source: 'unconfigured',
+            agent_key: 'ideation-challenger',
             env_var: 'IDEATION_CHAT_MODEL',
+            env_var_is_runtime_fallback: false,
+            builtin_model_id: 'anthropic/claude-sonnet-4',
+            detail:
+              'No stored ideation-challenger row. chat_agents_dynamic is on, so Core has ' +
+              'nothing to resolve and every chat turn fails until one is seeded.',
           },
         ],
       },
@@ -194,7 +200,11 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('Models in use')).toBeInTheDocument()
     })
-    expect(screen.getByText(/anthropic\/claude-sonnet-4/)).toBeInTheDocument()
+    // #67: with nothing stored, chat is not "running on the built-in default"
+    // — Core has nothing to resolve and the turn fails. The built-in is still
+    // shown, as the value a seed would write.
+    expect(screen.getByText('not configured — this path fails')).toBeInTheDocument()
+    expect(screen.getByText('anthropic/claude-sonnet-4')).toBeInTheDocument()
   })
 
   it('stores a built-in default verbatim when asked to make it editable', async () => {
