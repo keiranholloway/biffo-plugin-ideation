@@ -78,13 +78,20 @@ class TestBuiltinAgents:
         assert challenger["system_prompt"] == CHALLENGER_INSTRUCTIONS
         assert analyst["system_prompt"] == ANALYST_INSTRUCTIONS
 
-    def test_the_reported_models_are_the_models_the_founder_app_uses(self) -> None:
-        """The drift guard: ``app.py`` resolves its models from this module, so
-        the panel cannot report one model while requests run on another."""
-        challenger, analyst = builtin_chat_agents()
+    def test_the_analyst_default_is_the_one_the_founder_app_falls_back_to(self) -> None:
+        """The drift guard for the one model that genuinely has a fallback:
+        ``app.py`` resolves the analyst's from this module, so the seeded
+        default cannot differ from what ``finalise`` actually falls back to.
 
-        assert challenger["model"] == founder_app._CHAT_MODEL
+        There is deliberately no challenger equivalent. ``app.py`` used to hold
+        a chat model and hand it to the service, which handed it to the adapter,
+        which dropped it — so this guard asserted agreement between two values
+        neither of which reached a request (issue #68). The challenger's real
+        agreement is between this module and the seed script, below."""
+        _challenger, analyst = builtin_chat_agents()
+
         assert analyst["model"] == founder_app._ANALYSIS_MODEL
+        assert not hasattr(founder_app, "_CHAT_MODEL")
 
     def test_the_seed_script_stores_a_copy_of_the_shown_default(self) -> None:
         """Seeding (or clicking "store this default" in the panel) must write

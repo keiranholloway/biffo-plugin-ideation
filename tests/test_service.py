@@ -12,7 +12,6 @@ import pytest
 from ideation.definitions import (
     ANALYST_INSTRUCTIONS,
     CHALLENGER_AGENT_NAME,
-    CHALLENGER_INSTRUCTIONS,
     REPORT_TOOL_NAME,
 )
 from ideation.models import ANALYSING, COMPLETE, GATHERING, Run, Session, TurnResult
@@ -26,6 +25,12 @@ from ideation.service import (
     TurnLimitReachedError,
     extract_report,
 )
+
+#: What Core reports a challenger turn ran on. Resolved from the stored
+#: chat-agent row, server-side; nothing in this plugin selects it. The fake used
+#: to echo back the caller's own ``model`` argument, which made a parameter the
+#: adapter discarded look like it round-tripped (issue #68).
+CORE_RESOLVED_MODEL = "core-resolved/challenger"
 
 
 class FakeCore:
@@ -100,23 +105,14 @@ class FakeCore:
         self.sessions[session_id] = replace(self.sessions[session_id], deleted=True)
 
     async def run_chat_turn(
-        self,
-        *,
-        thread_id: str,
-        owner_sub: str,
-        agent_name: str,
-        system_prompt: str,
-        user_text: str,
-        model: str,
+        self, *, thread_id: str, owner_sub: str, agent_name: str, user_text: str
     ) -> TurnResult:
         self.turn_calls.append(
             {
                 "thread_id": thread_id,
                 "owner_sub": owner_sub,
                 "agent_name": agent_name,
-                "system_prompt": system_prompt,
                 "user_text": user_text,
-                "model": model,
             }
         )
         idx = len(self.turn_calls) - 1
@@ -128,7 +124,7 @@ class FakeCore:
                 {"role": "assistant", "content": reply},
             ]
         )
-        return TurnResult(reply=reply, model=model, output_tokens=len(reply))
+        return TurnResult(reply=reply, model=CORE_RESOLVED_MODEL, output_tokens=len(reply))
 
     async def request_analysis(
         self,
@@ -183,7 +179,7 @@ class FakeCore:
 
 
 def _service(core: FakeCore, **kw: Any) -> IdeationService:
-    return IdeationService(core, chat_model="chat/m", analysis_model="analysis/m", **kw)
+    return IdeationService(core, analysis_model="analysis/m", **kw)
 
 
 def _report_payload(problem: str = "A real problem.") -> dict[str, Any]:
@@ -250,19 +246,47 @@ class TestChat:
         session, result = asyncio.run(scenario())
         # the buffered reply came back whole
         assert result.reply == "Why now?"
-        # exactly one spine call, with the plugin's prompt + the founder's RAW text
+        # exactly one spine call, carrying the agent key and the founder's RAW text
         assert len(core.turn_calls) == 1
         call = core.turn_calls[0]
         assert call["agent_name"] == CHALLENGER_AGENT_NAME
-        assert call["system_prompt"] == CHALLENGER_INSTRUCTIONS
         assert call["user_text"] == "It helps coaches."  # unfenced — Core fences it
-        assert call["model"] == "chat/m"
+        # ...and nothing else. Core resolves the prompt and model from the
+        # agent's registration, which with chat_agents_dynamic on is the stored
+        # row; a prompt or model sent from here would claim control this side
+        # does not have (issue #68).
+        assert set(call) == {"thread_id", "owner_sub", "agent_name", "user_text"}
+        # the model on the result is Core's answer, not this plugin's request
+        assert result.model == CORE_RESOLVED_MODEL
         # the counter advanced
         assert session.turn_count == 1
 
-    def test_the_seed_idea_never_enters_the_system_prompt(self) -> None:
+    def test_the_challenger_prompt_and_model_are_not_sent_at_all(self) -> None:
+        """The port has no parameter for either, so there is nothing to discard.
+
+        The previous signature required both and the adapter dropped them,
+        which read as "the challenger runs on this constant and its stored row
+        is inert" — the wrong diagnosis reached while investigating #58. Wiring
+        them through would have made that true.
+        """
+        import inspect
+
+        from ideation.adapter import CoreHttpGateway
+        from ideation.ports import CoreGateway
+
+        for impl in (CoreGateway, CoreHttpGateway):
+            params = set(inspect.signature(impl.run_chat_turn).parameters)
+            assert "system_prompt" not in params
+            assert "model" not in params
+
+        # ...and the service holds no chat model to pass.
+        assert "chat_model" not in inspect.signature(IdeationService.__init__).parameters
+
+    def test_the_seed_idea_never_enters_the_instruction_channel(self) -> None:
         # regression: the founder's idea is untrusted; it must not be concatenated
         # into the trusted instruction channel. It enters as the first user turn.
+        # Since #68 the guarantee is structural rather than a value check —
+        # there is no instruction channel on this call for it to leak into.
         core = FakeCore()
         svc = _service(core)
 
@@ -271,8 +295,9 @@ class TestChat:
             await svc.chat_turn(owner_sub="u", session_id=s.id, user_message="SECRET-SEED")
 
         asyncio.run(scenario())
-        assert "SECRET-SEED" not in core.turn_calls[0]["system_prompt"]
-        assert core.turn_calls[0]["user_text"] == "SECRET-SEED"
+        call = core.turn_calls[0]
+        assert call["user_text"] == "SECRET-SEED"
+        assert [k for k, v in call.items() if v == "SECRET-SEED"] == ["user_text"]
 
     def test_turn_cap_is_enforced(self) -> None:
         svc = _service(FakeCore(), max_turns=2)
