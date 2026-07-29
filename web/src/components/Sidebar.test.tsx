@@ -32,6 +32,22 @@ describe('Sidebar', () => {
     expect(screen.getByText('No past runs yet')).toBeInTheDocument()
   })
 
+  it('says the load failed rather than showing the empty state when it did', () => {
+    render(
+      <Sidebar
+        sessions={[]}
+        activeId={null}
+        onSelect={vi.fn()}
+        onNewIdea={vi.fn()}
+        onDelete={vi.fn()}
+        loadFailed
+      />,
+    )
+
+    expect(screen.getByText(/Couldn.t load your past runs/)).toBeInTheDocument()
+    expect(screen.queryByText('No past runs yet')).not.toBeInTheDocument()
+  })
+
   it('calls onSelect with the session when clicking an item', () => {
     const sessions: SessionSummary[] = [
       { session_id: 's1', title: 'My idea', status: 'complete', created_at: '2026-07-25T10:00:00Z' },

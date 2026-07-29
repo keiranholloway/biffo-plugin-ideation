@@ -84,9 +84,12 @@ export interface Agent {
 
 export type Api = ReturnType<typeof createApi>
 
-export function createApi(getIdToken: () => string | null) {
+// Async on purpose: the token is resolved per request, not snapshotted, so an
+// expired one can be swapped for a refreshed one before the call goes out
+// (see auth.getFreshIdToken). A synchronous getter is still accepted.
+export function createApi(getIdToken: () => string | null | Promise<string | null>) {
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const token = getIdToken()
+    const token = await getIdToken()
     const res = await fetch(`${API_BASE}${path}`, {
       method,
       headers: {

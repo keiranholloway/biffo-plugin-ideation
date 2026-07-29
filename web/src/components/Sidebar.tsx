@@ -6,9 +6,11 @@ export interface SidebarProps {
   onSelect: (session: SessionSummary) => void
   onNewIdea: () => void
   onDelete: (session: SessionSummary) => void
+  /** The last list load failed, so `sessions` is unknown rather than empty. */
+  loadFailed?: boolean
 }
 
-export function Sidebar({ sessions, activeId, onSelect, onNewIdea, onDelete }: SidebarProps) {
+export function Sidebar({ sessions, activeId, onSelect, onNewIdea, onDelete, loadFailed = false }: SidebarProps) {
   return (
     <nav className="ide-sidebar">
       <div className="ide-sidebar-header">
@@ -17,7 +19,14 @@ export function Sidebar({ sessions, activeId, onSelect, onNewIdea, onDelete }: S
         </button>
       </div>
 
-      {sessions.length === 0 ? (
+      {sessions.length === 0 && loadFailed ? (
+        // Never claim "no past runs" off a failed load: to a founder whose runs
+        // are right there in the database, that empty state reads as data loss,
+        // and it is the reason #69 was filed against the wrong layer twice.
+        <p className="ide-sidebar-empty ide-sidebar-empty--error" role="status">
+          Couldn&apos;t load your past runs
+        </p>
+      ) : sessions.length === 0 ? (
         <p className="ide-sidebar-empty">No past runs yet</p>
       ) : (
         <ul className="ide-sidebar-list">

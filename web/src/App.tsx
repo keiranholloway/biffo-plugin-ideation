@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { getCurrentSession } from './lib/auth'
+import { getCurrentSession, getFreshIdToken } from './lib/auth'
 import { ApiError, createApi, type Agent, type Api, type Report, type SessionState, type SessionSummary } from './lib/api'
 import { isFounder, REQUIRED_GROUP } from './lib/roles'
 import { ReportCard } from './components/ReportCard'
@@ -52,6 +52,10 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<Report | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
+  // "We could not load your runs" is a different fact from "you have no runs",
+  // and the sidebar must not tell the second story when the first is true — an
+  // empty list that is really a failed load reads as data loss (#69).
+  const [sessionsFailed, setSessionsFailed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submittedIdea, setSubmittedIdea] = useState<string | null>(null)
   const [agents, setAgents] = useState<Agent[]>([])
@@ -73,7 +77,11 @@ export default function App() {
         setReady(true)
         return
       }
-      setApi(createApi(() => s.getIdToken().getJwtToken()))
+      // The client resolves a token per request rather than closing over `s`.
+      // `s` is an immutable snapshot whose ID token stops working the moment it
+      // expires — capturing it here made every call 401 for the rest of the
+      // page's life, with no recovery short of a reload (#69).
+      setApi(createApi(getFreshIdToken))
       setReady(true)
     })
   }, [])
@@ -100,7 +108,9 @@ export default function App() {
     try {
       const list = await api.listSessions()
       setSessions(list)
+      setSessionsFailed(false)
     } catch (e) {
+      setSessionsFailed(true)
       setError(errorText(e))
     }
   }
@@ -185,6 +195,12 @@ export default function App() {
         { role: 'you', text: seed.trim() },
         { role: 'ideation', text: r.reply },
       ])
+      // The row exists now, so the nav must stop showing the list as it was at
+      // mount. Before this, the only refresh after mount was the one that fires
+      // when a report materialises — so a run that was never finalised, or whose
+      // report poll errored out, stayed invisible in the sidebar for the whole
+      // life of the page while sitting in the database (#69).
+      void refreshSessions()
     } catch (e) {
       setError(errorText(e))
     } finally {
@@ -260,7 +276,7 @@ export default function App() {
 
   return (
     <div className="ide-layout">
-      <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} onDelete={handleDeleteSession} />
+      <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} onDelete={handleDeleteSession} loadFailed={sessionsFailed} />
       <main className="ide">
         <h1>Ideation Engine</h1>
         {error && <div className="ide-error">{error}</div>}
