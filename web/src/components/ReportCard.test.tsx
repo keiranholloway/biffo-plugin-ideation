@@ -235,4 +235,32 @@ describe('ReportCard', () => {
     expect(screen.getByText('Daily standup')).toBeInTheDocument()
     expect(screen.getByText('Async updates')).toBeInTheDocument()
   })
+
+  it('renders the title when supplied', () => {
+    render(<ReportCard report={completeReportFixture} title="My Awesome Idea" />)
+
+    expect(screen.getByText('My Awesome Idea')).toBeInTheDocument()
+  })
+
+  it('does not render extra content when title is absent', () => {
+    render(<ReportCard report={completeReportFixture} />)
+
+    // The report should render normally
+    expect(screen.getByText('Viability scorecard')).toBeInTheDocument()
+    // But there should be no title header (just check we're not rendering an extra element)
+    const titleElements = screen.queryAllByText(/My Awesome Idea/)
+    expect(titleElements).toHaveLength(0)
+  })
+
+  it('renders the title BEFORE the "Viability scorecard" heading in document order', () => {
+    const { container } = render(<ReportCard report={completeReportFixture} title="Report Title" />)
+
+    // Get the positions in the DOM
+    const titlePos = container.innerHTML.indexOf('Report Title')
+    const headingPos = container.innerHTML.indexOf('Viability scorecard')
+
+    expect(titlePos).toBeGreaterThan(-1) // Title is in the document
+    expect(headingPos).toBeGreaterThan(-1) // Heading is in the document
+    expect(titlePos).toBeLessThan(headingPos) // Title comes before heading
+  })
 })

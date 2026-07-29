@@ -902,6 +902,161 @@ describe('App founder-group gate (direct navigation to /ideation/)', () => {
     expect(await screen.findByLabelText('Your idea')).toBeInTheDocument()
     expect(screen.queryByText(/available to members of the/i)).not.toBeInTheDocument()
   })
+
+  it('shows the report title when clicking a past complete session', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    const sessionList = [
+      { session_id: 's1', title: 'My Completed Idea', status: 'complete' as const, created_at: '2026-07-25T10:00:00Z' },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') {
+        return {
+          ok: true,
+          json: async () => sessionList,
+          text: async () => JSON.stringify(sessionList),
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/report') {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'complete',
+            title: 'My Completed Idea',
+            report: {
+              prd: {
+                problem: 'Test problem',
+                target_users: [],
+                workflows: [],
+                data_entities: [],
+                capabilities: [],
+                out_of_scope: [],
+              },
+              scorecard: {
+                viability: { score: 4, rationale: 'good' },
+                complexity: { score: 3, rationale: 'moderate' },
+                economic_moat: { score: 2, rationale: 'weak' },
+                market_fit: { score: 4, rationale: 'strong' },
+                build_vs_buy: 'Build',
+                competitors: [],
+                summary: 'Summary text',
+              },
+            },
+          }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('My Completed Idea')).toBeInTheDocument()
+    })
+
+    screen.getByText('My Completed Idea').click()
+
+    await waitFor(() => {
+      // The title should appear in the report
+      expect(screen.getAllByText('My Completed Idea').length).toBeGreaterThanOrEqual(2) // Once in sidebar, once in report
+      expect(screen.getByText('Viability scorecard')).toBeInTheDocument()
+    })
+  })
+
+  it('shows the report title when a live run completes (analysing poll)', async () => {
+    const mockSession = createMockSession()
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => [], text: async () => '[]' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({
+            reply: 'Tell me more',
+            session_id: 's1',
+            status: 'gathering',
+            turn_count: 1,
+            min_turns: 1,
+            max_turns: 5,
+            can_finalise: true,
+          }),
+          text: async () => '',
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/finalise') {
+        return {
+          ok: true,
+          json: async () => ({ status: 'analysing', analysis_run_id: 'r1' }),
+          text: async () => '',
+        } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions/s1/report') {
+        return {
+          ok: true,
+          json: async () => ({
+            status: 'complete',
+            title: 'My Live Run Title',
+            report: {
+              prd: {
+                problem: 'P',
+                target_users: [],
+                workflows: [],
+                data_entities: [],
+                capabilities: [],
+                out_of_scope: [],
+              },
+              scorecard: {
+                viability: { score: 4, rationale: 'x' },
+                complexity: { score: 3, rationale: 'x' },
+                economic_moat: { score: 2, rationale: 'x' },
+                market_fit: { score: 4, rationale: 'x' },
+                build_vs_buy: 'Build',
+                competitors: [],
+                summary: 'Final summary',
+              },
+            },
+          }),
+          text: async () => '',
+        } as Response
+      }
+      throw new Error(`Unexpected URL: ${String(url)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('Your idea'), { target: { value: 'A great idea' } })
+    screen.getByText('Start').click()
+
+    await waitFor(() => {
+      expect(screen.getByText('Generate review')).toBeInTheDocument()
+    })
+
+    screen.getByText('Generate review').click()
+
+    await waitFor(() => {
+      expect(screen.getByText('Analysing your idea — researching the landscape and scoring it…')).toBeInTheDocument()
+    })
+
+    // Wait for the report to complete and the title to appear
+    await waitFor(
+      () => {
+        expect(screen.getByText('My Live Run Title')).toBeInTheDocument()
+        expect(screen.getByText('Final summary')).toBeInTheDocument()
+      },
+      { timeout: 6000 },
+    )
+  }, 8000)
 })
 
 describe('App ?seed= deep-link', () => {

@@ -77,10 +77,11 @@ function PrdList({ label, items }: { label: string; items: string[] }) {
   )
 }
 
-export function ReportCard({ report }: { report: Report }) {
+export function ReportCard({ report, title }: { report: Report; title?: string }) {
   const { prd, scorecard } = report
   return (
     <section className="ide-report">
+      {title && <header className="ide-report-title">{title}</header>}
       <h2>Viability scorecard</h2>
       <p className="ide-summary">{scorecard.summary}</p>
       <div className="ide-axes">
