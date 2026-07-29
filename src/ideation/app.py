@@ -139,6 +139,15 @@ def _derive_title(seed_idea: str, *, max_len: int = 60) -> str:
     return truncated + "…"
 
 
+def _display_title(session) -> str:  # type: ignore[no-untyped-def]
+    """The title a founder sees for a session, wherever it is shown.
+
+    One derivation, used by both the session list and the report, so the two
+    can never disagree about what an idea is called.
+    """
+    return session.title or _derive_title(session.seed_idea)
+
+
 def _state(session) -> dict:  # type: ignore[no-untyped-def]
     return {
         "session_id": session.id,
@@ -153,7 +162,7 @@ def _state(session) -> dict:  # type: ignore[no-untyped-def]
 def _summary(session) -> dict:  # type: ignore[no-untyped-def]
     return {
         "session_id": session.id,
-        "title": session.title or _derive_title(session.seed_idea),
+        "title": _display_title(session),
         "status": session.status,
         "created_at": session.created_at,
     }
@@ -237,4 +246,4 @@ async def read_report(
     trust model)."""
     report = await svc.get_report(owner_sub=founder.sub, session_id=session_id)
     state = await svc.get_session(owner_sub=founder.sub, session_id=session_id)
-    return {"status": state.status, "report": report}
+    return {"status": state.status, "title": _display_title(state), "report": report}

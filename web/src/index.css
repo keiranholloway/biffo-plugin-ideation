@@ -63,6 +63,7 @@ button:disabled { background: var(--border-strong); cursor: not-allowed; }
 .ide-agent-picker select { font: inherit; padding: .5rem .6rem; border: 1px solid var(--border-strong); border-radius: 8px; }
 .ide-analysing { color: var(--brand-strong); font-weight: 600; }
 .ide-report { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--brand); border-radius: var(--radius); padding: 1.25rem; margin-top: 1.5rem; }
+.ide-report-title { display: block; font-size: 1.15rem; font-weight: 600; margin: -1.25rem -1.25rem 1rem -1.25rem; padding: 1rem 1.25rem; background: var(--brand-soft); border-bottom: 1px solid var(--border); }
 .ide-summary { font-size: 1.05rem; }
 .ide-axes { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: 1rem 0; }
 .ide-axis { border: 1px solid #eee; border-radius: 8px; padding: .6rem .7rem; }

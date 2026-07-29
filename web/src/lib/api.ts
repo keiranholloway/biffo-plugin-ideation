@@ -67,6 +67,7 @@ export interface Report {
 
 export interface ReportResponse {
   status: string
+  title: string
   report: Report | null
 }
 

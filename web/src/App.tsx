@@ -51,6 +51,7 @@ export default function App() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [report, setReport] = useState<Report | null>(null)
+  const [reportTitle, setReportTitle] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   // "We could not load your runs" is a different fact from "you have no runs",
   // and the sidebar must not tell the second story when the first is true — an
@@ -125,6 +126,7 @@ export default function App() {
         if (stopped) return
         if (r.report) {
           setReport(r.report)
+          setReportTitle(r.title)
           setSession((s) => (s ? { ...s, status: 'complete' } : s))
           setView({ kind: 'report', sessionId: session.session_id })
           await refreshSessions()
@@ -148,6 +150,7 @@ export default function App() {
     setSession(null)
     setMessages([])
     setReport(null)
+    setReportTitle(null)
     setInput('')
     setAgentKey('')
   }
@@ -159,6 +162,7 @@ export default function App() {
     // exactly the state they need, no leftovers from the prior selection.
     setSession(null)
     setReport(null)
+    setReportTitle(null)
     setMessages([])
 
     if (clicked.status === 'complete') {
@@ -167,6 +171,7 @@ export default function App() {
         const r = await api!.getReport(clicked.session_id)
         if (r.report) {
           setReport(r.report)
+          setReportTitle(r.title)
         }
       } catch (e) {
         setError(errorText(e))
@@ -367,7 +372,7 @@ export default function App() {
           </section>
         )}
 
-        {view.kind === 'report' && report && <ReportCard report={report} />}
+        {view.kind === 'report' && report && <ReportCard report={report} title={reportTitle ?? undefined} />}
       </main>
     </div>
   )

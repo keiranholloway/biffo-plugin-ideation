@@ -416,3 +416,78 @@ def test_delete_another_founders_session_is_404(client, core):
     app.dependency_overrides[require_founder] = lambda: ForwardedUser(
         sub="alice", groups=["founder"], token="tok"
     )
+
+
+def test_read_report_returns_explicit_title_when_set(client, core):
+    """read_report returns the explicit title when Session.title is set."""
+    seed = "an idea"
+    sid = client.post("/sessions", json={"seed_idea": seed}).json()["session_id"]
+    # Manually set a title on the session
+    core.sessions[sid] = replace(core.sessions[sid], title="Explicit Title")
+    # Set the session to complete status and add a report
+    core.complete_analysis(_tool_call())
+    core.sessions[sid] = replace(core.sessions[sid], status="complete")
+    # Save the report so it's available
+    core.reports[sid] = _REPORT
+
+    resp = client.get(f"/sessions/{sid}/report")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["title"] == "Explicit Title"
+    assert body["report"] is not None
+
+
+def test_read_report_returns_derived_title_when_not_set(client, core):
+    """read_report returns the derived title when Session.title is None."""
+    # Use a seed_idea longer than 60 chars to exercise truncation
+    long_seed = "I want to build an app that helps coaches manage their admin and scheduling"
+    sid = client.post("/sessions", json={"seed_idea": long_seed}).json()["session_id"]
+    # Ensure title is None
+    core.sessions[sid] = replace(core.sessions[sid], title=None)
+    # Set the session to complete status and add a report
+    core.complete_analysis(_tool_call())
+    core.sessions[sid] = replace(core.sessions[sid], status="complete")
+    # Save the report so it's available
+    core.reports[sid] = _REPORT
+
+    resp = client.get(f"/sessions/{sid}/report")
+    assert resp.status_code == 200
+    body = resp.json()
+    # Title should be derived from seed_idea and truncated
+    assert body["title"].endswith("…")
+    assert body["title"] != long_seed  # Should be truncated
+    assert len(body["title"]) < len(long_seed)
+    assert body["report"] is not None
+
+
+def test_read_report_title_matches_list_sessions_title_anti_drift(client, core):
+    """For the same session, title from GET /sessions/{id}/report equals title from GET /sessions.
+
+    This is the anti-drift test that justifies the whole design — using one session
+    fixture and both routes to ensure the two can never disagree about what an idea
+    is called.
+    """
+    # Create a session with a long seed idea
+    long_seed = "I want to build an app that helps coaches manage their admin and scheduling"
+    sid = client.post("/sessions", json={"seed_idea": long_seed}).json()["session_id"]
+
+    # Get the title from the sessions list
+    list_resp = client.get("/sessions")
+    assert list_resp.status_code == 200
+    list_summaries = list_resp.json()
+    assert len(list_summaries) == 1
+    list_title = list_summaries[0]["title"]
+
+    # Now complete the analysis and get the report title
+    core.complete_analysis(_tool_call())
+    core.sessions[sid] = replace(core.sessions[sid], status="complete")
+    # Save the report so it's available
+    core.reports[sid] = _REPORT
+
+    report_resp = client.get(f"/sessions/{sid}/report")
+    assert report_resp.status_code == 200
+    report_body = report_resp.json()
+    report_title = report_body["title"]
+
+    # The titles must be exactly equal
+    assert report_title == list_title
