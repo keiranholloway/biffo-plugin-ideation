@@ -242,14 +242,13 @@ describe('ReportCard', () => {
     expect(screen.getByText('My Awesome Idea')).toBeInTheDocument()
   })
 
-  it('does not render extra content when title is absent', () => {
-    render(<ReportCard report={completeReportFixture} />)
+  it('renders no title header when title is absent', () => {
+    const { container } = render(<ReportCard report={completeReportFixture} />)
 
     // The report should render normally
     expect(screen.getByText('Viability scorecard')).toBeInTheDocument()
-    // But there should be no title header (just check we're not rendering an extra element)
-    const titleElements = screen.queryAllByText(/My Awesome Idea/)
-    expect(titleElements).toHaveLength(0)
+    // But there should be no title header element
+    expect(container.querySelector('.ide-report-title')).toBeNull()
   })
 
   it('renders the title BEFORE the "Viability scorecard" heading in document order', () => {
