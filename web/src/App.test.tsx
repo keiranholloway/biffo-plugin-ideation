@@ -19,13 +19,12 @@ function mockFetch(status: number, body: unknown) {
 // A real Cognito ID token carries group membership in `cognito:groups`; the
 // default here is a founder, because that is what every other test in this file
 // is about. Pass explicit groups to exercise the gate itself.
-function createMockSession(groups: unknown = ['founder']) {
-  return {
-    getIdToken: () => ({
-      getJwtToken: () => 'test-token',
-      payload: { 'cognito:groups': groups },
-    }),
-  } as unknown as CognitoUserSession
+// `jwt` is fixed per session object on purpose: the real `CognitoUserSession` is
+// an immutable snapshot, so a JWT read off one never changes no matter how long
+// the page has been open (see lib/auth.ts).
+function createMockSession(groups: unknown = ['founder'], jwt = 'test-token') {
+  const idToken = { getJwtToken: () => jwt, payload: { 'cognito:groups': groups } }
+  return { getIdToken: () => idToken } as unknown as CognitoUserSession
 }
 
 describe('App', () => {
@@ -967,5 +966,110 @@ describe('App ?seed= deep-link', () => {
     fireEvent.change(box, { target: { value: 'my own idea' } })
 
     expect(box).toHaveValue('my own idea')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #69 — "my finished run is not in my list, and it came back the next day with
+// no deploy". The API and the database were right the whole time; the founder
+// SPA showed a list that was true only at mount, on a token that was true only
+// at mount. Three guards, one per way the nav could lie.
+// ---------------------------------------------------------------------------
+describe('session list freshness', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function authHeaders(f: ReturnType<typeof mockFetch>): (string | undefined)[] {
+    return f.mock.calls.map(
+      ([, init]) => (init?.headers as Record<string, string> | undefined)?.['Authorization'],
+    )
+  }
+
+  it('authorises every call with a re-resolved token, never the snapshot taken at mount', async () => {
+    // The mount-time session exists only to read `cognito:groups` off. Its JWT
+    // is whatever was cached when the page loaded — possibly seconds from
+    // expiry — and it never changes again, so nothing may send it.
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(
+      createMockSession(['founder'], 'snapshot-jwt'),
+    )
+    vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('refreshed-jwt')
+    const f = mockFetch(200, [])
+
+    render(<App />)
+
+    await waitFor(() => expect(f).toHaveBeenCalled())
+    const sent = authHeaders(f)
+    expect(sent.length).toBeGreaterThan(0)
+    expect(sent).not.toContain('Bearer snapshot-jwt')
+    for (const header of sent) expect(header).toBe('Bearer refreshed-jwt')
+  })
+
+  it('refetches the list once a run is created, so it does not stay as it was at mount', async () => {
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('tok')
+
+    // The list is genuinely empty when the page loads, and gains a row the
+    // moment the founder starts a run. Nothing else in the app changes.
+    let listed: unknown[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET'
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'GET') {
+        return { ok: true, json: async () => listed, text: async () => '' } as Response
+      }
+      if (url === '/api/v1/plugins/ideation/sessions' && method === 'POST') {
+        listed = [
+          {
+            session_id: 's1',
+            title: 'A marketplace for farm shops',
+            status: 'gathering',
+            created_at: '2026-07-28T18:57:00Z',
+          },
+        ]
+        return {
+          ok: true,
+          json: async () => ({
+            reply: 'why now?',
+            session_id: 's1',
+            status: 'gathering',
+            turn_count: 1,
+            min_turns: 3,
+            max_turns: 5,
+            can_finalise: false,
+          }),
+          text: async () => '',
+        } as Response
+      }
+      return { ok: true, json: async () => ({ idea: null }), text: async () => '' } as Response
+    })
+
+    render(<App />)
+    await screen.findByLabelText('Your idea')
+    expect(screen.getByText('No past runs yet')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Your idea'), { target: { value: 'farm shops' } })
+    screen.getByText('Start').click()
+
+    // Before this fix the nav only refetched when a *report* materialised, so a
+    // run that was never finalised — or whose report poll errored — stayed
+    // invisible for the life of the page while sitting in the database.
+    await waitFor(() => {
+      expect(screen.getByText('A marketplace for farm shops')).toBeInTheDocument()
+    })
+  })
+
+  it('does not claim "No past runs yet" when the list failed to load', async () => {
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('expired-tok')
+    mockFetch(401, 'Unauthorized')
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn.t load your past runs/)).toBeInTheDocument()
+    })
+    // The empty state is a claim about the founder's data. It must not be made
+    // on the strength of a request that never succeeded.
+    expect(screen.queryByText('No past runs yet')).not.toBeInTheDocument()
   })
 })
