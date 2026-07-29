@@ -7,12 +7,19 @@ import type { CognitoUserSession } from 'amazon-cognito-identity-js'
 
 vi.mock('./lib/auth')
 
-function createMockSession() {
+function createMockSession(jwt = 'test-token') {
   return {
     getIdToken: () => ({
-      getJwtToken: () => 'test-token',
+      getJwtToken: () => jwt,
     }),
   } as unknown as CognitoUserSession
+}
+
+/** Every Authorization header sent, in call order. */
+function authHeaders(f: ReturnType<typeof mockFetch>) {
+  return f.mock.calls.map(
+    ([, init]) => (init?.headers as Record<string, string> | undefined)?.['Authorization'],
+  )
 }
 
 function jsonResponse(payload: unknown): Response {
@@ -45,6 +52,24 @@ function mockFetch(overrides: {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('authorises every call with a re-resolved token, never the snapshot taken at mount', async () => {
+    // The mount-time session exists only to prove a session is present. Its JWT
+    // is whatever was cached when the page loaded — possibly seconds from
+    // expiry — and a CognitoUserSession is an immutable snapshot, so that JWT
+    // never changes again. Nothing may send it (issue #73; #72 fixed web/).
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession('snapshot-jwt'))
+    vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('refreshed-jwt')
+    const f = mockFetch()
+
+    render(<App />)
+
+    await waitFor(() => expect(f).toHaveBeenCalled())
+    const sent = authHeaders(f)
+    expect(sent.length).toBeGreaterThan(0)
+    expect(sent).not.toContain('Bearer snapshot-jwt')
+    for (const header of sent) expect(header).toBe('Bearer refreshed-jwt')
   })
 
   it('shows sign-in prompt when no session', async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { getCurrentSession } from './lib/auth'
+import { getCurrentSession, getFreshIdToken } from './lib/auth'
 import {
   createApi,
   type Api,
@@ -41,7 +41,11 @@ export default function App() {
         setReady(true)
         return
       }
-      setApi(createApi(() => s.getIdToken().getJwtToken()))
+      // Re-resolve per request, never the mount-time snapshot: a
+      // CognitoUserSession is immutable, so its JWT is frozen with whatever
+      // life the cached token had left and every call 401s once it lapses
+      // (#73; #72 fixed the founder app the same way).
+      setApi(createApi(getFreshIdToken))
       setReady(true)
     })
   }, [])
