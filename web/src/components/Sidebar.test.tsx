@@ -48,6 +48,57 @@ describe('Sidebar', () => {
     expect(screen.queryByText('No past runs yet')).not.toBeInTheDocument()
   })
 
+  it('does not claim "no past runs" before the list has been fetched', () => {
+    // `sessions` starts empty and `loadFailed` starts false, which is exactly
+    // the state between mount and the first fetch resolving. Saying "No past
+    // runs yet" there states as fact something the app has not yet asked
+    // about — the same missing-distinction #72 fixed for the failed case (#83).
+    render(
+      <Sidebar
+        sessions={[]}
+        activeId={null}
+        onSelect={vi.fn()}
+        onNewIdea={vi.fn()}
+        onDelete={vi.fn()}
+        loaded={false}
+      />,
+    )
+
+    expect(screen.queryByText('No past runs yet')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Couldn.t load your past runs/)).not.toBeInTheDocument()
+  })
+
+  it('shows the empty state once the list has been fetched and is genuinely empty', () => {
+    render(
+      <Sidebar
+        sessions={[]}
+        activeId={null}
+        onSelect={vi.fn()}
+        onNewIdea={vi.fn()}
+        onDelete={vi.fn()}
+        loaded
+      />,
+    )
+
+    expect(screen.getByText('No past runs yet')).toBeInTheDocument()
+  })
+
+  it('prefers the failure message over the pending state when a load failed', () => {
+    render(
+      <Sidebar
+        sessions={[]}
+        activeId={null}
+        onSelect={vi.fn()}
+        onNewIdea={vi.fn()}
+        onDelete={vi.fn()}
+        loaded
+        loadFailed
+      />,
+    )
+
+    expect(screen.getByText(/Couldn.t load your past runs/)).toBeInTheDocument()
+  })
+
   it('calls onSelect with the session when clicking an item', () => {
     const sessions: SessionSummary[] = [
       { session_id: 's1', title: 'My idea', status: 'complete', created_at: '2026-07-25T10:00:00Z' },

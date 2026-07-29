@@ -57,6 +57,7 @@ export default function App() {
   // and the sidebar must not tell the second story when the first is true — an
   // empty list that is really a failed load reads as data loss (#69).
   const [sessionsFailed, setSessionsFailed] = useState(false)
+  const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submittedIdea, setSubmittedIdea] = useState<string | null>(null)
   const [agents, setAgents] = useState<Agent[]>([])
@@ -113,6 +114,9 @@ export default function App() {
     } catch (e) {
       setSessionsFailed(true)
       setError(errorText(e))
+    } finally {
+      // Settled either way — the sidebar may now speak about an empty list.
+      setSessionsLoaded(true)
     }
   }
 
@@ -281,7 +285,7 @@ export default function App() {
 
   return (
     <div className="ide-layout">
-      <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} onDelete={handleDeleteSession} loadFailed={sessionsFailed} />
+      <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} onDelete={handleDeleteSession} loadFailed={sessionsFailed} loaded={sessionsLoaded} />
       <main className="ide">
         <h1>Ideation Engine</h1>
         {error && <div className="ide-error">{error}</div>}

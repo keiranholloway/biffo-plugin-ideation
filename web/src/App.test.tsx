@@ -32,6 +32,38 @@ describe('App', () => {
     vi.clearAllMocks()
   })
 
+  it('never says "No past runs yet" while the list request is still in flight', async () => {
+    // The regression this guards is invisible to every other test here, because
+    // they all await the resolved state. Between mount and the fetch resolving,
+    // `sessions` is [] and `sessionsFailed` is false — which used to render the
+    // same words as a completed empty load, telling a founder with runs that
+    // they had none (#83).
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('tok')
+
+    let releaseSessions: (v: unknown) => void = () => {}
+    const pending = new Promise((resolve) => {
+      releaseSessions = resolve
+    })
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).includes('/sessions')) {
+        await pending
+        return { ok: true, status: 200, json: async () => [], text: async () => '[]' } as Response
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' } as Response
+    })
+
+    render(<App />)
+
+    // The list has not answered yet, so the sidebar must not speak for it.
+    await waitFor(() => expect(screen.getByText(/Loading your past runs/)).toBeInTheDocument())
+    expect(screen.queryByText('No past runs yet')).not.toBeInTheDocument()
+
+    // Once it answers with a genuinely empty list, the empty state is correct.
+    releaseSessions(null)
+    await waitFor(() => expect(screen.getByText('No past runs yet')).toBeInTheDocument())
+  })
+
   it('renders the sidebar with mocked sessions', async () => {
     const mockSession = createMockSession()
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)
