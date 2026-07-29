@@ -46,10 +46,10 @@ export default function App() {
     })
   }, [])
 
-  // Fetch agents and catalog when ready
+  // Fetch agents and catalog when ready. refreshAgents pulls the effective
+  // configuration too — it is derived from those same rows (#67).
   useEffect(() => {
     if (!api) return
-    void refreshEffectiveConfig()
     void refreshAgents()
     void refreshCatalog()
   }, [api])
@@ -65,6 +65,10 @@ export default function App() {
     }
   }
 
+  /** Reload the agent rows AND the effective configuration derived from them.
+   * Since #67 the "Models in use" panel is resolved server-side from these
+   * rows, so refreshing one without the other would leave the panel asserting
+   * the model the admin just replaced. */
   async function refreshAgents() {
     if (!api) return
     try {
@@ -73,6 +77,7 @@ export default function App() {
     } catch (e) {
       setError(`Failed to load agents: ${errorText(e)}`)
     }
+    await refreshEffectiveConfig()
   }
 
   async function refreshCatalog() {
@@ -218,10 +223,11 @@ export default function App() {
       {tab === 'agents' && (
         <section className="admin-section">
           <h2>Chat Agents</h2>
-          <AgentForm onSubmit={handleCreateAgent} />
+          <AgentForm onSubmit={handleCreateAgent} catalogEntries={catalogEntries} />
           <AgentList
             agents={agents}
             builtins={builtinAgents}
+            catalogEntries={catalogEntries}
             onUpdate={handleUpdateAgent}
             onDelete={handleDeleteAgent}
             onStoreBuiltin={handleStoreBuiltin}

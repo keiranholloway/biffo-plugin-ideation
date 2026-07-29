@@ -175,7 +175,7 @@ def test_list_sessions_maps_rows_including_created_at():
 # ── chat turn (agent-chat) ───────────────────────────────────────────────────────
 
 
-def test_run_chat_turn_targets_the_agent_key_and_omits_the_prompt():
+def test_run_chat_turn_targets_the_agent_key_and_sends_only_the_message():
     t = FakeTransport()
     path = f"/api/v1/internal/agent-chat/{CHALLENGER_AGENT_NAME}"
     t.on("POST", path, {"reply": "Why now?", "model": "m", "output_tokens": 3})
@@ -186,16 +186,33 @@ def test_run_chat_turn_targets_the_agent_key_and_omits_the_prompt():
             thread_id="th-1",
             owner_sub="alice",
             agent_name=CHALLENGER_AGENT_NAME,
-            system_prompt="SECRET PROMPT",
             user_text="my answer",
-            model="chat/m",
         )
     )
 
     body = t.call("POST", path)["json"]
     assert body == {"message": "my answer", "thread_id": "th-1"}
-    assert "SECRET PROMPT" not in str(body)  # the prompt is Core's, resolved by key
+    # The model on the result is the one Core resolved from the registration
+    # and reported back — this side never asked for one.
     assert result.reply == "Why now?" and result.model == "m"
+
+
+def test_run_chat_turn_has_no_prompt_or_model_parameter_to_discard():
+    """Issue #68: it used to require both keyword args and send neither.
+
+    The behaviour was right — Core resolves the prompt and model from the
+    agent's registration, which with ``chat_agents_dynamic: true`` is the
+    stored chat-agent row, so the plugin must not override them. The defect was
+    a signature promising control it does not have: read alongside service.py
+    it said the challenger ran on a plugin-side constant and its stored row was
+    inert, which is the opposite of the truth. Deleting them is the fix;
+    wiring them through would have created the bug the signature implied.
+    """
+    import inspect
+
+    params = inspect.signature(CoreHttpGateway.run_chat_turn).parameters
+
+    assert set(params) == {"self", "thread_id", "owner_sub", "agent_name", "user_text"}
 
 
 # ── analysis (thread read + agent-run create) ────────────────────────────────────

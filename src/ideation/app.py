@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpGateway
 from .definitions import MAX_TURNS, MIN_TURNS
-from .effective_config import analysis_model, chat_model
+from .effective_config import analysis_model
 from .models import ANALYSING, GATHERING
 from .service import (
     AnalysisFailedError,
@@ -38,10 +38,14 @@ from .service import (
 )
 from .transport import CoreTransport
 
-#: The models this app runs on. Resolved by ``effective_config`` rather than
+#: The analyst's fallback model, resolved by ``effective_config`` rather than
 #: read from the environment here, so the admin panel's "what is actually in
 #: use" view and this request path cannot disagree (issue #58).
-_CHAT_MODEL = chat_model()
+#:
+#: There is no chat equivalent. The challenger's model lives in its stored
+#: chat-agent row and Core resolves it; a value held here was passed to the
+#: adapter and discarded, which read as agreement with the panel while being no
+#: such thing (issue #68).
 _ANALYSIS_MODEL = analysis_model()
 
 #: The founder gate — verifies the shared-Cognito JWT and requires the group. The
@@ -53,11 +57,7 @@ def get_service(founder: ForwardedUser = Depends(require_founder)) -> IdeationSe
     """One :class:`IdeationService` per request, bound to Core over a transport that
     signs as this Lambda AND forwards *this* founder's token."""
     transport = CoreTransport(founder_token=founder.token)
-    return IdeationService(
-        CoreHttpGateway(transport),
-        chat_model=_CHAT_MODEL,
-        analysis_model=_ANALYSIS_MODEL,
-    )
+    return IdeationService(CoreHttpGateway(transport), analysis_model=_ANALYSIS_MODEL)
 
 
 app = FastAPI(title="Ideation Engine", docs_url=None, redoc_url=None)

@@ -54,23 +54,27 @@ class CoreGateway(Protocol):
     async def delete_session(self, *, session_id: str) -> None: ...
 
     async def run_chat_turn(
-        self,
-        *,
-        thread_id: str,
-        owner_sub: str,
-        agent_name: str,
-        system_prompt: str,
-        user_text: str,
-        model: str,
+        self, *, thread_id: str, owner_sub: str, agent_name: str, user_text: str
     ) -> TurnResult:
         """Run one buffered challenger turn through the spine and return the reply.
 
-        Core does the trusted work: it fences ``user_text`` as untrusted data,
-        prepends the trusted ``system_prompt``, replays the thread's bounded
-        history, synchronously invokes the runtime, and persists the exchange as a
-        run in the thread (ADR-0016 §2, §7). The plugin passes its domain prompt
-        and the founder's *raw* message — it must never fence or assemble itself,
-        so the security guarantee lives in one trusted place.
+        The plugin passes the *agent key* and the founder's **raw** message, and
+        nothing else. Core does all the trusted work: it resolves the agent's
+        prompt and model from its registration — which with
+        ``chat_agents_dynamic: true`` is the stored chat-agent row — fences
+        ``user_text`` as untrusted data, replays the thread's bounded history,
+        synchronously invokes the runtime, and persists the exchange as a run in
+        the thread (ADR-0016 §1, §2, §7). The plugin must never fence or
+        assemble, so the security guarantee lives in one trusted place.
+
+        This signature used to take ``system_prompt`` and ``model`` as well.
+        Neither was ever sent (issue #68). Two dead arguments are not merely
+        untidy: they claimed control this side does not have, and the plain
+        reading of the call site — that the challenger runs on a plugin-side
+        constant and its stored row is inert — was the wrong diagnosis reached
+        while investigating #58 and nearly filed as a bug. Wiring them through
+        instead would have *created* that bug, by overriding the stored row that
+        the dynamic registry makes authoritative.
         """
         ...
 

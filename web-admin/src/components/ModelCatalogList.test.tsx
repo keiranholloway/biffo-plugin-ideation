@@ -26,16 +26,24 @@ describe('ModelCatalogList', () => {
     {
       purpose: 'chat',
       label: 'Challenger (requirement-gathering chat)',
-      model_id: 'anthropic/claude-sonnet-4',
-      source: 'built-in',
+      model_id: 'vendor/stored-chat',
+      source: 'stored',
+      agent_key: 'ideation-challenger',
       env_var: 'IDEATION_CHAT_MODEL',
+      env_var_is_runtime_fallback: false,
+      builtin_model_id: 'anthropic/claude-sonnet-4',
+      detail: 'From the stored ideation-challenger row, which is the only source.',
     },
     {
       purpose: 'analysis',
       label: 'Analyst (PRD + viability scorecard)',
       model_id: 'vendor/analysis-x',
       source: 'env',
+      agent_key: 'ideation-analyst',
       env_var: 'IDEATION_ANALYSIS_MODEL',
+      env_var_is_runtime_fallback: true,
+      builtin_model_id: 'vendor/analysis-x',
+      detail: 'No stored active analyst row, so finalise() falls back to this value.',
     },
   ]
 
@@ -138,11 +146,13 @@ describe('ModelCatalogList', () => {
     // models" while these two drove every run.
     expect(screen.queryByText('No catalog entries yet.')).not.toBeInTheDocument()
     expect(screen.getByText('Models in use')).toBeInTheDocument()
-    expect(screen.getByText(/anthropic\/claude-sonnet-4/)).toBeInTheDocument()
-    expect(screen.getByText(/vendor\/analysis-x/)).toBeInTheDocument()
+    expect(screen.getByText(/vendor\/stored-chat/)).toBeInTheDocument()
+    expect(screen.getAllByText(/vendor\/analysis-x/).length).toBeGreaterThan(0)
   })
 
-  it('says of each model whether it is a built-in default or an env override', () => {
+  // ── issue #67: the panel must not claim a model nothing is running on ──────
+
+  it('shows a stored row as the source, not the built-in it overrides', () => {
     render(
       <ModelCatalogList
         entries={[]}
@@ -152,8 +162,69 @@ describe('ModelCatalogList', () => {
       />,
     )
 
-    expect(screen.getByText(/built-in default — not stored/)).toBeInTheDocument()
-    expect(screen.getByText('from IDEATION_ANALYSIS_MODEL')).toBeInTheDocument()
+    expect(screen.getByText('from its stored agent row')).toBeInTheDocument()
+    // The built-in it replaced is still visible, but as the seed value it is —
+    // not as "the model in use".
+    expect(screen.getByText('anthropic/claude-sonnet-4')).toBeInTheDocument()
+    expect(screen.getByText(/never sent to Core/)).toBeInTheDocument()
+    expect(screen.queryByText(/built-in default — not stored/)).not.toBeInTheDocument()
+  })
+
+  it('renders an unconfigured chat model as a failure, not as a default', () => {
+    // With chat_agents_dynamic on, no stored challenger row means Core has
+    // nothing to resolve and every turn 404s. The old panel would have shown a
+    // plausible model id here.
+    const unconfigured: EffectiveModel[] = [
+      { ...mockEffective[0], model_id: null, source: 'unconfigured' },
+    ]
+
+    render(
+      <ModelCatalogList
+        entries={[]}
+        effectiveModels={unconfigured}
+        currentDefault={null}
+        {...noopProps()}
+      />,
+    )
+
+    expect(screen.getByText('not configured — this path fails')).toBeInTheDocument()
+    expect(screen.queryByText(/vendor\/stored-chat/)).not.toBeInTheDocument()
+  })
+
+  it('says so when the stored rows could not be read at all', () => {
+    // "We could not look" is a different claim from "nothing is stored", and
+    // rendering the second for the first would report a broken deployment
+    // every time Core cold-started.
+    const unknown: EffectiveModel[] = [
+      { ...mockEffective[0], model_id: null, source: 'unknown' },
+    ]
+
+    render(
+      <ModelCatalogList
+        entries={[]}
+        effectiveModels={unknown}
+        currentDefault={null}
+        {...noopProps()}
+      />,
+    )
+
+    expect(screen.getByText(/could not read the stored rows/)).toBeInTheDocument()
+  })
+
+  it('renders the server-side explanation rather than wording of its own', () => {
+    // The resolution rule and its wording live together in effective_config.py,
+    // so the panel cannot describe a source the resolver does not implement.
+    render(
+      <ModelCatalogList
+        entries={[]}
+        effectiveModels={mockEffective}
+        currentDefault={null}
+        {...noopProps()}
+      />,
+    )
+
+    expect(screen.getByText(mockEffective[0].detail)).toBeInTheDocument()
+    expect(screen.getByText(mockEffective[1].detail)).toBeInTheDocument()
   })
 
   it('keeps showing the models in use alongside a populated catalog', () => {

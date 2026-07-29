@@ -1,10 +1,13 @@
 import { useState } from 'react'
-import type { BuiltinAgent, ChatAgent } from '../lib/api'
+import type { BuiltinAgent, ChatAgent, ModelCatalogEntry } from '../lib/api'
+import { ModelSelect } from './ModelSelect'
 
 interface AgentListProps {
   agents: ChatAgent[]
   /** The agents the engine falls back to when no stored row overrides them. */
   builtins: BuiltinAgent[]
+  /** The curated list the model is chosen from (issue #67). */
+  catalogEntries: ModelCatalogEntry[]
   onUpdate: (key: string, updates: Partial<ChatAgent>) => void
   onDelete: (key: string) => void
   onStoreBuiltin: (builtin: BuiltinAgent) => void
@@ -39,6 +42,7 @@ export function mergeAgentRows(agents: ChatAgent[], builtins: BuiltinAgent[]): R
 export function AgentList({
   agents,
   builtins,
+  catalogEntries,
   onUpdate,
   onDelete,
   onStoreBuiltin,
@@ -128,12 +132,16 @@ export function AgentList({
                       onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                     />
                   </label>
+                  {/* A picker, not free text: this row's model is what Core
+                      resolves the challenger on (chat_agents_dynamic), and a
+                      slug the provider does not serve fails silently at
+                      request time rather than at entry (#66, #67). */}
                   <label>
                     Model:
-                    <input
-                      type="text"
+                    <ModelSelect
+                      entries={catalogEntries}
                       value={editForm.model ?? ''}
-                      onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
+                      onChange={(model) => setEditForm({ ...editForm, model })}
                     />
                   </label>
                   {/*

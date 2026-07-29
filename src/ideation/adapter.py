@@ -15,8 +15,9 @@ Seam mapping (all under ``/api/v1``):
   in a body/param; the adapter relies on Core's owner-scoping and ignores the
   ``owner_sub`` the port passes (a non-HTTP adapter/fake uses it instead).
 - a challenger turn → ``/internal/agent-chat/{agent_key}`` (ADR-0017 §3). Core
-  resolves the registered agent by key, so ``system_prompt``/``model`` from the
-  port are not sent — the registration is the trusted source (ADR-0016 §1).
+  resolves the registered agent by key — with ``chat_agents_dynamic: true`` that
+  is the stored chat-agent row — so the prompt and model are the registration's,
+  never this plugin's (ADR-0016 §1). The port has no parameter for either.
 - the async analysis → read the thread's conversation, then create an agent run
   carrying the analyst definition + the report *output tool* (ADR-0017 §4).
 """
@@ -147,17 +148,12 @@ class CoreHttpGateway:
         await self._t.request("PATCH", f"{_SESSIONS}/{session_id}", json={"deleted": True})
 
     async def run_chat_turn(
-        self,
-        *,
-        thread_id: str,
-        owner_sub: str,
-        agent_name: str,
-        system_prompt: str,
-        user_text: str,
-        model: str,
+        self, *, thread_id: str, owner_sub: str, agent_name: str, user_text: str
     ) -> TurnResult:
-        # agent_name is the registered agent key; system_prompt/model come from the
-        # registration in Core, not from here.
+        # agent_name is the registered agent key. The prompt and model come from
+        # the registration in Core — with chat_agents_dynamic on, the stored
+        # chat-agent row — so this method has no prompt or model parameter to
+        # discard (issue #68).
         resp = await self._t.request(
             "POST",
             f"{_AGENT_CHAT}/{agent_name}",

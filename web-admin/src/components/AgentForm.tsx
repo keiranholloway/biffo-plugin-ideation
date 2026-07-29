@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import type { ChatAgent } from '../lib/api'
+import type { ChatAgent, ModelCatalogEntry } from '../lib/api'
+import { ModelSelect } from './ModelSelect'
 
 interface AgentFormProps {
   onSubmit: (agent: Omit<ChatAgent, 'agent_key'>) => void
+  /** The curated list the model is chosen from (issue #67). */
+  catalogEntries: ModelCatalogEntry[]
 }
 
-export function AgentForm({ onSubmit }: AgentFormProps) {
+export function AgentForm({ onSubmit, catalogEntries }: AgentFormProps) {
   const [form, setForm] = useState<Omit<ChatAgent, 'agent_key'>>({
     agent_name: '',
     role: '',
@@ -79,11 +82,11 @@ export function AgentForm({ onSubmit }: AgentFormProps) {
 
           <label>
             Model:
-            <input
-              type="text"
-              required
+            <ModelSelect
+              entries={catalogEntries}
               value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
+              onChange={(model) => setForm({ ...form, model })}
+              required
             />
           </label>
 

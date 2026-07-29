@@ -20,6 +20,10 @@ from ideation.app import _derive_title, app, get_service, require_founder
 from ideation.models import GATHERING, Run, Session, TurnResult
 from ideation.service import IdeationService
 
+#: What Core reports a challenger turn ran on. Resolved from the stored
+#: chat-agent row, server-side; nothing in this plugin selects it.
+CORE_RESOLVED_MODEL = "core-resolved/challenger"
+
 _REPORT = {
     "prd": {
         "problem": "Coaches drown in admin.",
@@ -87,11 +91,13 @@ class FakeCore:
     async def delete_session(self, *, session_id) -> None:
         self.sessions[session_id] = replace(self.sessions[session_id], deleted=True)
 
-    async def run_chat_turn(
-        self, *, thread_id, owner_sub, agent_name, system_prompt, user_text, model
-    ) -> TurnResult:
+    async def run_chat_turn(self, *, thread_id, owner_sub, agent_name, user_text) -> TurnResult:
         self._reply += 1
-        return TurnResult(reply=f"challenge {self._reply}", model=model)
+        # The model on the result is the one *Core* resolved from the agent's
+        # registration and reports back — not one this side chose. The fake used
+        # to echo the caller's own `model` argument, which made a discarded
+        # parameter look like it round-tripped (issue #68).
+        return TurnResult(reply=f"challenge {self._reply}", model=CORE_RESOLVED_MODEL)
 
     async def request_analysis(
         self, *, thread_id, owner_sub, agent_name, definition, output_tool
@@ -151,7 +157,7 @@ def client(core: FakeCore) -> Iterator[TestClient]:
         sub="alice", groups=["founder"], token="tok"
     )
     app.dependency_overrides[get_service] = lambda: IdeationService(
-        core, chat_model="chat/m", analysis_model="analysis/m"
+        core, analysis_model="analysis/m"
     )
     yield TestClient(app)
     app.dependency_overrides.clear()

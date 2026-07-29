@@ -21,7 +21,6 @@ from pydantic import ValidationError
 from .definitions import (
     ANALYST_AGENT_NAME,
     CHALLENGER_AGENT_NAME,
-    CHALLENGER_INSTRUCTIONS,
     MAX_TURNS,
     MIN_TURNS,
     REPORT_TOOL_NAME,
@@ -92,13 +91,15 @@ class IdeationService:
         self,
         core: CoreGateway,
         *,
-        chat_model: str,
         analysis_model: str,
         min_turns: int = MIN_TURNS,
         max_turns: int = MAX_TURNS,
     ) -> None:
+        # There is deliberately no chat_model. The challenger's model comes from
+        # its stored chat-agent row, resolved by Core (issue #68); holding one
+        # here only ever produced an argument the adapter discarded. The
+        # analyst's is real — finalise() falls back to it when no row exists.
         self._core = core
-        self._chat_model = chat_model
         self._analysis_model = analysis_model
         self._min_turns = min_turns
         self._max_turns = max_turns
@@ -163,11 +164,14 @@ class IdeationService:
         runtime, and persist the turn (ADR-0016 §7). Then it advances the turn
         counter.
 
-        ``system_prompt`` is still passed for port-signature parity with the
-        analyst's inline-definition path, but Core's chat-turn spine resolves
-        the *actual* prompt server-side from ``agent_name`` (the registered/
-        live-configured agent), never from what's sent here (ADR-0016 §1) — see
-        adapter.py's ``run_chat_turn`` docstring.
+        No prompt and no model are passed. Core's chat-turn spine resolves both
+        server-side from ``agent_name``, and with ``chat_agents_dynamic: true``
+        that is the stored chat-agent row (ADR-0016 §1). This call used to send
+        ``CHALLENGER_INSTRUCTIONS`` and a chat model that the adapter dropped on
+        the floor (issue #68) — which made the challenger look like it ran on a
+        plugin-side constant with its stored row inert, the opposite of the
+        truth. Unlike the analyst below, which does send its whole definition
+        inline, there is nothing for this path to configure.
         """
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         if session.status != GATHERING:
@@ -179,9 +183,7 @@ class IdeationService:
             thread_id=session.thread_id,
             owner_sub=owner_sub,
             agent_name=session.challenger_agent_key,
-            system_prompt=CHALLENGER_INSTRUCTIONS,
             user_text=user_message,
-            model=self._chat_model,
         )
         await self._core.set_turn_count(session_id=session_id, turn_count=session.turn_count + 1)
         return result

@@ -65,13 +65,35 @@ export interface BuiltinAgent {
   active: boolean
 }
 
+/**
+ * Where a model actually comes from, resolved server-side against the stored
+ * chat-agent rows — never asserted from this plugin's constants.
+ *
+ * - `stored`       a stored row is what runs; the built-in is not consulted.
+ * - `unconfigured` nothing is stored and there is no fallback (chat only:
+ *                  with chat_agents_dynamic on, Core has nothing to resolve
+ *                  and every turn fails).
+ * - `unknown`      the stored rows could not be read, so no claim is made.
+ * - `env`/`built-in` a genuine fallback is in force (analysis only).
+ */
+export type ModelSource = 'stored' | 'unconfigured' | 'unknown' | 'env' | 'built-in'
+
 /** A model actually reaching the runtime, and where its value came from. */
 export interface EffectiveModel {
   purpose: string
   label: string
-  model_id: string
-  source: 'built-in' | 'env'
+  /** Null when the source is `unconfigured` or `unknown` — there is no value. */
+  model_id: string | null
+  source: ModelSource
+  /** The stored row this purpose resolves against. */
+  agent_key: string
   env_var: string
+  /** False for chat: the var only decides what a *seed* would write. */
+  env_var_is_runtime_fallback: boolean
+  /** What a seed or "store a copy to edit" would put in the row. */
+  builtin_model_id: string
+  /** The explanation, worded server-side next to the resolution rule. */
+  detail: string
 }
 
 export interface EffectiveConfig {
