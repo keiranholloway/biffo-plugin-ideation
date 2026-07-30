@@ -116,6 +116,23 @@ class CoreGateway(Protocol):
         this plugin's own roles, or None if never configured."""
         ...
 
+    async def seed_own_config(self, *, config: list[dict[str, Any]]) -> list[dict[str, bool]]:
+        """Seed this plugin's own agent-config rows, insert-if-absent (issue #93).
+
+        Sends a list of role definitions (agent_key, agent_name, role,
+        system_prompt, model, required_group, active — the shape
+        ``ideation.effective_config.builtin_chat_agents()`` returns). Returns a
+        list of ``{"role": str, "created": bool}``, one per definition.
+
+        **Never overwrites an existing row**, regardless of differences between
+        the supplied values and what is stored — the property the whole
+        seeding guarantee rests on. Called on every cold start (both app.py and
+        admin_app.py), so an admin's edited prompt must survive every
+        redeploy; overwriting it would silently revert the feature this seam
+        exists to protect. Writes no history rows either: a seed-created row is
+        the row's origin, not a change to it."""
+        ...
+
     async def list_active_agents(self, *, role: str) -> list[dict[str, Any]]:
         """Every active row for this plugin's own given role (e.g. "challenger")
         — for a founder-facing picker. Each item carries at least agent_key and

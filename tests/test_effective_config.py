@@ -1,15 +1,17 @@
-"""The effective configuration the engine actually runs on (issues #58, #67).
+"""The effective configuration the engine actually runs on (issues #58, #67, #93).
 
 The admin panel used to list the chat-agent table and report "No agents defined
 yet" on an empty one — true about the table, false about the system (#58). Its
 replacement then reported the *built-in* models as in use however the table
 looked, which was false the other way (#67): the challenger's model comes only
-from its stored row, and the analyst's does too whenever a row exists.
+from its stored row. Since #93 that is true of the analyst too — its runtime
+fallback is gone, and it now behaves exactly like the challenger: a stored row
+or nothing runs at all.
 
 These tests hold the views of those defaults together — what the seed script
-would store, what ``ideation.app`` falls back to for the analyst, and what the
-admin panel is told — and pin that the panel's answer is resolved against the
-stored rows rather than asserted from constants.
+and both plugin apps' startup seeding would store, and what the admin panel is
+told — and pin that the panel's answer is resolved against the stored rows
+rather than asserted from constants.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ from typing import Any
 
 import pytest
 
-from ideation import app as founder_app
 from ideation.definitions import (
     ANALYST_AGENT_NAME,
     ANALYST_INSTRUCTIONS,
@@ -30,8 +31,6 @@ from ideation.effective_config import (
     CHAT_MODEL_ENV,
     DEFAULT_ANALYSIS_MODEL,
     DEFAULT_CHAT_MODEL,
-    SOURCE_BUILT_IN,
-    SOURCE_ENV,
     SOURCE_STORED,
     SOURCE_UNCONFIGURED,
     SOURCE_UNKNOWN,
@@ -40,6 +39,7 @@ from ideation.effective_config import (
     chat_model,
     effective_models,
 )
+from ideation.service import IdeationService
 
 
 def _row(**overrides: Any) -> dict[str, Any]:
@@ -78,20 +78,26 @@ class TestBuiltinAgents:
         assert challenger["system_prompt"] == CHALLENGER_INSTRUCTIONS
         assert analyst["system_prompt"] == ANALYST_INSTRUCTIONS
 
-    def test_the_analyst_default_is_the_one_the_founder_app_falls_back_to(self) -> None:
-        """The drift guard for the one model that genuinely has a fallback:
-        ``app.py`` resolves the analyst's from this module, so the seeded
-        default cannot differ from what ``finalise`` actually falls back to.
+    def test_neither_founder_app_holds_a_model_for_either_role(self) -> None:
+        """Issue #93 removed the analyst's runtime fallback, so there is no
+        longer a model either app needs to hold and hand to the service — the
+        drift-guard this test used to be (comparing ``builtin_chat_agents()``'s
+        analyst model against a module-level ``founder_app._ANALYSIS_MODEL``)
+        would now be asserting agreement between two values, neither of which
+        reaches a request, exactly the trap issue #68 already named for the
+        challenger's ``_CHAT_MODEL``. The fix is for neither attribute to
+        exist, not for them to agree."""
+        import inspect
 
-        There is deliberately no challenger equivalent. ``app.py`` used to hold
-        a chat model and hand it to the service, which handed it to the adapter,
-        which dropped it — so this guard asserted agreement between two values
-        neither of which reached a request (issue #68). The challenger's real
-        agreement is between this module and the seed script, below."""
-        _challenger, analyst = builtin_chat_agents()
+        from ideation import admin_app as founder_admin_app
+        from ideation import app as founder_app
 
-        assert analyst["model"] == founder_app._ANALYSIS_MODEL
         assert not hasattr(founder_app, "_CHAT_MODEL")
+        assert not hasattr(founder_app, "_ANALYSIS_MODEL")
+        assert "analysis_model" not in inspect.signature(IdeationService.__init__).parameters
+        # Both apps still know the seed payload, though — for startup seeding.
+        assert hasattr(founder_app, "_seed_agent_config")
+        assert hasattr(founder_admin_app, "_seed_agent_config")
 
     def test_the_seed_script_stores_a_copy_of_the_shown_default(self) -> None:
         """Seeding (or clicking "store this default" in the panel) must write
@@ -204,32 +210,40 @@ class TestEffectiveModels:
 
     def test_an_inactive_analyst_row_does_not_count_as_configured(self) -> None:
         """``get_own_config`` resolves the *active* row for the role; an
-        inactive one must not be reported as what runs."""
+        inactive one must not be reported as what runs — since issue #93 that
+        means unconfigured, not a built-in fallback (there is no longer one)."""
         analysis = _by_purpose(
             [_row(agent_key=ANALYST_AGENT_NAME, role="analyst", model="vendor/x", active=False)]
         )["analysis"]
 
-        assert analysis["source"] == SOURCE_BUILT_IN
-        assert analysis["model_id"] == DEFAULT_ANALYSIS_MODEL
+        assert analysis["source"] == SOURCE_UNCONFIGURED
+        assert analysis["model_id"] is None
 
-    def test_the_analysis_fallback_is_real_and_names_where_it_came_from(
+    def test_no_stored_analyst_row_is_unconfigured_not_a_built_in_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Unlike chat, the analyst genuinely falls back — so with no stored
-        row the built-in/env value IS what runs, and ``source`` says which."""
+        """Issue #93 removed the analyst's runtime fallback: with nothing
+        stored, ``finalise()`` now raises rather than reading the built-in or
+        env value, so reporting either as "in use" would be exactly the failure
+        #67 named for chat — a plausible model id hiding a broken deployment.
+        The analyst is no longer an exception to the challenger's rule; both
+        report ``unconfigured`` with no model_id and no runtime-fallback env
+        var, regardless of what the environment holds."""
         monkeypatch.delenv(ANALYSIS_MODEL_ENV, raising=False)
-        assert _by_purpose([])["analysis"] == {
-            **_by_purpose([])["analysis"],
-            "source": SOURCE_BUILT_IN,
-            "model_id": DEFAULT_ANALYSIS_MODEL,
-            "env_var": ANALYSIS_MODEL_ENV,
-            "env_var_is_runtime_fallback": True,
-        }
+        analysis = _by_purpose([])["analysis"]
+        assert analysis["source"] == SOURCE_UNCONFIGURED
+        assert analysis["model_id"] is None
+        assert analysis["env_var"] == ANALYSIS_MODEL_ENV
+        assert analysis["env_var_is_runtime_fallback"] is False
+        # The built-in/env value is still shown as what a seed would write,
+        # even though nothing reads it at request time any more.
+        assert analysis["builtin_model_id"] == DEFAULT_ANALYSIS_MODEL
 
         monkeypatch.setenv(ANALYSIS_MODEL_ENV, "vendor/analysis-x")
         analysis = _by_purpose([])["analysis"]
-        assert analysis["source"] == SOURCE_ENV
-        assert analysis["model_id"] == "vendor/analysis-x"
+        assert analysis["source"] == SOURCE_UNCONFIGURED
+        assert analysis["model_id"] is None
+        assert analysis["builtin_model_id"] == "vendor/analysis-x"
 
     def test_an_unreadable_table_is_unknown_not_unconfigured(self) -> None:
         """``None`` means "we could not look", which is a different claim from

@@ -233,7 +233,7 @@ def test_request_analysis_reads_the_thread_then_creates_the_run():
             thread_id="th-1",
             owner_sub="alice",
             agent_name="ideation-analyst",
-            definition=analyst_definition(model="a/m"),
+            definition=analyst_definition(model="a/m", instructions="do the analysis"),
             output_tool=report_tool_schema(),
         )
     )
@@ -387,6 +387,25 @@ def test_list_active_agents_passes_the_role_filter_and_returns_rows():
 
     assert result == rows
     assert t.call("GET", "/api/v1/internal/plugins/me/config")["params"] == {"role": "challenger"}
+
+
+def test_seed_own_config_posts_to_the_seed_route_with_the_full_payload():
+    """The adapter must send the whole seed payload as the request body to the
+    dedicated seed route, and return whatever Core reports per-role (issue #93)."""
+    t = FakeTransport()
+    payload = [
+        {"agent_key": "ideation-challenger", "role": "challenger", "system_prompt": "p"},
+        {"agent_key": "ideation-analyst", "role": "analyst", "system_prompt": "p2"},
+    ]
+    scripted = [{"role": "challenger", "created": True}, {"role": "analyst", "created": False}]
+    t.on("POST", "/api/v1/internal/plugins/me/config/seed", scripted)
+    gw = CoreHttpGateway(t)
+
+    result = _run(gw.seed_own_config(config=payload))
+
+    assert result == scripted
+    call = t.call("POST", "/api/v1/internal/plugins/me/config/seed")
+    assert call["json"] == payload
 
 
 # ── session row mapping ──────────────────────────────────────────────────────

@@ -2,20 +2,25 @@
 """Seed the ideation-challenger and ideation-analyst rows into Core's live
 chat-agent registry.
 
-Run this ONCE, manually, by an operator with real Cognito admin credentials,
-BEFORE deploying biffo.plugin.json's chat_agents_dynamic: true flag. Once that
-flag is live, Core stops registering ideation-challenger from the static
-manifest — if no row exists yet in the dynamic table, every founder chat turn
-404s until this has run. This script does not run itself automatically; it is
-not invoked by any deploy pipeline or plugin runtime code.
+This is now a manual, operator-driven entry point, **not a hard prerequisite**
+(issue #93). Both plugin apps (``ideation.app`` and ``ideation.admin_app``)
+seed the same two rows automatically on every cold start, insert-if-absent, via
+``POST /internal/plugins/me/config/seed``. This script exists for the same
+reason ``biffo-plugin-idea-scout``'s manual seed script does: an operator with
+real Cognito admin credentials can run it ahead of time (e.g. before the
+plugin's first deploy, or to inspect/dry-run the payload) without waiting on a
+cold start, and it uses the admin-bearer-token route (``POST
+/admin/plugins/ideation/chat-agents``) because a human operator has no SigV4
+identity to seed with — 409 on an already-seeded role is treated as success.
 
-The analyst row is seeded here too, even though the analyst was never part of
-Core's static chat-agent registry (it sends its whole definition inline on
-every run, not resolved server-side by agent_key) — IdeationService.finalise()
-reads this row live via the internal plugin-config read (ADR-0009) to make the
-analyst's prompt/model admin-editable, falling back to the built-in default
-if this row is absent (so it is NOT a deployment-ordering hazard the way the
-challenger row is — finalise() degrades gracefully, chat turns don't 404).
+Before issue #93, this really was a hard prerequisite: with
+``chat_agents_dynamic: true`` and no automatic seeding, an unrun script left
+every founder chat turn 404ing, and — contrary to what this docstring used to
+claim — the analyst was no safer: ``IdeationService.finalise()`` no longer
+falls back to the built-in default when its row is absent; it raises
+``AgentConfigMissingError``. Both roles are equally a deployment-ordering
+hazard if nothing ever seeds them; automatic startup seeding is what removes
+that hazard now, not this script.
 
 Usage:
     CORE_API_URL=https://<api-id>.execute-api.<region>.amazonaws.com \

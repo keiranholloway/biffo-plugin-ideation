@@ -16,6 +16,7 @@ from ideation.definitions import (
 )
 from ideation.models import ANALYSING, COMPLETE, GATHERING, Run, Session, TurnResult
 from ideation.service import (
+    AgentConfigMissingError,
     AnalysisFailedError,
     IdeationService,
     MalformedReportError,
@@ -173,13 +174,50 @@ class FakeCore:
         """Populated per-test via _own_config: {role: {system_prompt, model}}."""
         return self._own_config.get(role)
 
+    async def seed_own_config(self, *, config: list[dict[str, Any]]) -> list[dict[str, bool]]:
+        """Insert-if-absent, matching Core's real seed-route contract — this
+        service-level fake is not exercised by ``IdeationService`` (only the
+        two apps' startup code calls it directly), but it must satisfy the
+        ``CoreGateway`` protocol structurally (see ``tests/test_startup_seeding.py``
+        for the behavioural coverage of the real seeding path)."""
+        result = []
+        for row in config:
+            role = row["role"]
+            created = role not in self._own_config
+            if created:
+                self._own_config[role] = {
+                    "system_prompt": row["system_prompt"],
+                    "model": row["model"],
+                }
+            result.append({"role": role, "created": created})
+        return result
+
     async def list_active_agents(self, *, role: str) -> list[dict[str, Any]]:
         """Populated per-test via _active_agents: {role: [{agent_key, agent_name}, ...]}."""
         return self._active_agents.get(role, [])
 
 
+#: The model a seeded analyst row would carry in these tests — arbitrary, but
+#: named once so ``finalise()``'s default-happy-path tests (which no longer
+#: have a service-level fallback to lean on since issue #93) don't each invent
+#: their own.
+SEEDED_ANALYST_MODEL = "analysis/m"
+
+
+def _seed_analyst(core: FakeCore) -> None:
+    """Seed the fake's analyst config row, insert-if-absent — matching what
+    startup seeding guarantees in the real app (issue #93). Called by default
+    wherever a test's ``finalise()`` call is expected to succeed, so tests
+    exercising *that* behaviour don't each have to remember to seed it; the one
+    test that specifically exercises the missing-row case deliberately does
+    NOT call this."""
+    core._own_config.setdefault(
+        "analyst", {"system_prompt": ANALYST_INSTRUCTIONS, "model": SEEDED_ANALYST_MODEL}
+    )
+
+
 def _service(core: FakeCore, **kw: Any) -> IdeationService:
-    return IdeationService(core, analysis_model="analysis/m", **kw)
+    return IdeationService(core, **kw)
 
 
 def _report_payload(problem: str = "A real problem.") -> dict[str, Any]:
@@ -324,6 +362,16 @@ class TestChat:
 
 class TestFinaliseAndReport:
     def _gathered(self, core: FakeCore, svc: IdeationService, turns: int) -> str:
+        """Gather ``turns`` messages, seeding the analyst config first — matching
+        what the real startup seeding guarantees (issue #93), so a test whose
+        point is something other than the missing-row case doesn't have to
+        restate it. The one test that specifically exercises a missing row
+        (``test_finalise_raises_agent_config_missing_error_when_unseeded``)
+        pops the seeded row back out after calling this, rather than this
+        helper skipping it — that keeps the "what's different about this test"
+        visible at the call site instead of hidden in a flag here."""
+        _seed_analyst(core)
+
         async def scenario() -> str:
             s = await svc.start_session(owner_sub="u", seed_idea="idea")
             for i in range(turns):
@@ -362,16 +410,20 @@ class TestFinaliseAndReport:
         assert req["definition"]["instructions"] == "A live-edited analyst prompt."
         assert req["definition"]["model"] == "some/live-model"
 
-    def test_finalise_falls_back_to_the_built_in_analyst_when_unconfigured(self) -> None:
-        core = FakeCore()  # no _own_config["analyst"] set
+    def test_finalise_raises_agent_config_missing_error_when_unseeded(self) -> None:
+        """Issue #93: the fallback to ``ANALYST_INSTRUCTIONS`` is gone. A
+        missing row — startup seeding having failed or not run — must raise
+        loudly and name the role, not silently read the built-in constant."""
+        core = FakeCore()
         svc = _service(core, min_turns=1)
         sid = self._gathered(core, svc, turns=1)
+        core._own_config.pop("analyst", None)  # undo what _gathered seeded
 
-        asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
+        with pytest.raises(AgentConfigMissingError) as exc_info:
+            asyncio.run(svc.finalise(owner_sub="u", session_id=sid))
 
-        req = core.analysis_requests[0]
-        assert req["definition"]["instructions"] == ANALYST_INSTRUCTIONS
-        assert req["definition"]["model"] == "analysis/m"  # _service()'s default
+        assert "analyst" in str(exc_info.value)
+        assert not core.analysis_requests  # never reached Core
 
     def test_finalise_needs_enough_turns(self) -> None:
         core = FakeCore()
@@ -570,6 +622,7 @@ class TestDeleteSession:
 
     def test_delete_session_in_gathering_and_analysing_status(self) -> None:
         core = FakeCore()
+        _seed_analyst(core)  # this scenario finalises s2, which now needs a row
         svc = _service(core, min_turns=1)
 
         async def scenario() -> tuple[str, str]:
