@@ -132,7 +132,6 @@ class TestBothAppsSeedAtStartup:
     def test_a_transient_core_failure_at_startup_is_logged_not_raised(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        caplog: pytest.LogCaptureFixture,
         module_name: str,
     ) -> None:
         """Proves the fix does the thing #912's implementation note insists
@@ -153,10 +152,30 @@ class TestBothAppsSeedAtStartup:
 
         monkeypatch.setattr(module, "CoreHttpGateway", _FailingGateway)
 
-        with caplog.at_level(logging.ERROR, logger=module.__name__):
-            _run(module._seed_agent_config())  # must not raise
+        # Capture from the module's OWN logger rather than through `caplog`,
+        # which depends on propagation reaching the root handler. That held here
+        # and did not hold in the instance: vendored into `biffo-platform`, this
+        # test runs in a suite that also imports Core, whose AWS Lambda Powertools
+        # `Logger()` reconfigures logging and disables propagation. The assertion
+        # then failed for a reason that has nothing to do with what it tests —
+        # green upstream, red downstream, on identical code.
+        records: list[logging.LogRecord] = []
 
-        assert any("seed" in record.message.lower() for record in caplog.records)
+        class _Capture(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        handler = _Capture()
+        module._LOGGER.addHandler(handler)
+        previous_level = module._LOGGER.level
+        module._LOGGER.setLevel(logging.ERROR)
+        try:
+            _run(module._seed_agent_config())  # must not raise
+        finally:
+            module._LOGGER.removeHandler(handler)
+            module._LOGGER.setLevel(previous_level)
+
+        assert any("seed" in record.getMessage().lower() for record in records)
 
 
 class TestSeedingNeverOverwrites:
