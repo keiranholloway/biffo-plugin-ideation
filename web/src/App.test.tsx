@@ -1232,7 +1232,12 @@ describe('session list freshness', () => {
 
     render(<App />)
     await screen.findByLabelText('Your idea')
-    expect(screen.getByText('No past runs yet')).toBeInTheDocument()
+    // `findByText`, not `getByText`. Since #84 the sidebar only makes the empty
+    // claim once `loaded` is true, i.e. after the sessions fetch resolves — and
+    // that resolves on a later microtask than the one `Your idea` renders on. A
+    // synchronous read here is a race: it passed on #84's own PR and then failed
+    // four consecutive runs on `dev`, and reproduces locally about 2 runs in 3.
+    await screen.findByText('No past runs yet')
 
     fireEvent.change(screen.getByLabelText('Your idea'), { target: { value: 'farm shops' } })
     screen.getByText('Start').click()
