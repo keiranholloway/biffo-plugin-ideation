@@ -8,11 +8,15 @@ for chat-agent management as same-origin routes, reports the engine's
 effective configuration, and serves the built web-admin/ bundle.
 
 **``/effective-config`` is not a proxy.** Every other route here lists a
-table, and an empty table rendered as "not configured" — which was false,
-because the engine runs on the built-ins in :mod:`ideation.effective_config`
-until an admin stores a row over one (issue #58). It answers from this
-plugin's own code and environment, so it reaches neither Core nor the
-database.
+table, and an empty table used to render as "not configured" — which was
+false while an admin had not yet stored a row (issue #58): the built-ins in
+:mod:`ideation.effective_config` are shown regardless of the table's state,
+because they are what a fresh row is seeded with, and displaying them lets an
+admin see what they would be replacing. Since issue #93 they are no longer a
+runtime fallback for either role, though: with genuinely nothing stored (both
+seedings having failed or not yet run), a request fails rather than running
+on them. It answers from this plugin's own code and environment, so it
+reaches neither Core nor the database.
 
 **The model catalog is not proxied here.** Its five CRUD routes are declared
 in ``biffo.plugin.json``'s ``api_routes``, which means Core generates and
@@ -34,6 +38,7 @@ httpx client, not the SDK's SignedCoreClient.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -43,9 +48,13 @@ from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
+from .adapter import CoreHttpError, CoreHttpGateway
 from .effective_config import builtin_chat_agents, effective_models
+from .transport import CoreTransport
 
 require_admin = require_group("admin")
+
+_LOGGER = logging.getLogger(__name__)
 
 _CORE_API_URL = os.environ.get("BIFFO_CORE_API_URL", "")
 _PLUGIN_NAME = "ideation"
@@ -60,6 +69,39 @@ _CHAT_AGENTS_BASE = f"/api/v1/admin/plugins/{_PLUGIN_NAME}/chat-agents"
 _CORE_TIMEOUT_SECONDS = 30.0
 
 app = FastAPI(title="Ideation Engine Admin", docs_url=None, redoc_url=None)
+
+
+@app.on_event("startup")
+async def _seed_agent_config() -> None:
+    """Seed both agent roles on startup — the admin app's own copy of the same
+    guarantee ``ideation.app`` provides (issue #93).
+
+    Both plugin apps seed independently: whichever one cold-starts first (or
+    only) still guarantees the rows exist, rather than the guarantee depending
+    on the founder-facing app having run at least once. Uses the plugin's own
+    SigV4 service identity (``CoreTransport``/``CoreHttpGateway``, the same
+    seam ``app.py`` uses) rather than this module's usual admin-bearer-token
+    ``_core_request`` — seeding is not an admin action taken on a caller's
+    behalf, it is this plugin identifying itself to Core.
+
+    Insert-if-absent and tolerant of a transient Core failure, identically to
+    ``ideation.app``'s handler: logs loudly rather than wedging startup, and an
+    admin's edited prompt is never overwritten by a later cold start."""
+    try:
+        transport = CoreTransport(founder_token="")
+        gateway = CoreHttpGateway(transport)
+        result = await gateway.seed_own_config(config=builtin_chat_agents())
+        created = sum(1 for r in result if r.get("created"))
+        already_present = len(result) - created
+        _LOGGER.info(
+            "Seeded %d new agent config row(s); %d already present", created, already_present
+        )
+    except CoreHttpError:
+        _LOGGER.exception(
+            "Failed to seed agent config at startup (Core may be unavailable). "
+            "Chat turns and analysis runs will fail loudly if a role's row is "
+            "genuinely missing."
+        )
 
 
 async def _core_request(
@@ -87,10 +129,13 @@ async def read_effective_config(
     """What the engine is running on right now, whether or not it is stored.
 
     The other routes here list *tables*. On an empty table that reads as "not
-    configured", which is false for the analyst: it runs on the built-ins in
-    :mod:`ideation.effective_config`, and creating a row **overrides** one of
-    them rather than filling a void (issue #58). This route is what lets the
-    admin UI say so.
+    configured" — true of neither role since issue #93 (both are seeded
+    automatically at startup, and neither has a code-level fallback if that
+    guarantee were somehow unmet), but the built-ins in
+    :mod:`ideation.effective_config` are shown regardless: they are what a
+    fresh row would be seeded with, and creating one **overrides** the display
+    rather than filling a void (issue #58). This route is what lets the admin
+    UI say so.
 
     ``agents`` is still answered with no hop — it is this plugin's own
     constants. ``models`` is not: the challenger's model comes *only* from its

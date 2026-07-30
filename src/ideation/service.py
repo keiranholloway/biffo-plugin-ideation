@@ -68,6 +68,32 @@ class AnalysisFailedError(IdeationError):
     """The async analysis run failed; there is no report to produce."""
 
 
+class AgentConfigMissingError(IdeationError):
+    """The analyst role has no configured row and seeding has not run.
+
+    The plugin guarantees a row exists at startup via seeding (both app.py and
+    admin_app.py run it, insert-if-absent, on every cold start — issue #93). A
+    missing row at request time means startup seeding failed or was skipped
+    entirely; the fallback to ``ANALYST_INSTRUCTIONS`` is deliberately gone, so
+    this is raised instead of silently reading the built-in constant.
+
+    There is no challenger equivalent of this class. A missing challenger row
+    is not this plugin's fallback to remove — Core's chat-turn spine resolves
+    the challenger server-side (``chat_agents_dynamic: true``) and already has
+    nothing to fall back to when the row is absent: it 404s the chat turn on
+    its own. This error exists only for the one role whose fallback lived in
+    this plugin's own code.
+    """
+
+    def __init__(self, role: str) -> None:
+        self.role = role
+        super().__init__(
+            f"Agent role '{role}' has no configured row. "
+            "Seeding may not have run at startup, or Core was unavailable. "
+            "Check the app logs and restart the plugin."
+        )
+
+
 def extract_report(run_messages: list[dict[str, Any]]) -> Report:
     """Pull the analyst's structured verdict out of its run transcript: find the
     ``submit_ideation_report`` tool call and validate its arguments against
@@ -91,16 +117,18 @@ class IdeationService:
         self,
         core: CoreGateway,
         *,
-        analysis_model: str,
         min_turns: int = MIN_TURNS,
         max_turns: int = MAX_TURNS,
     ) -> None:
-        # There is deliberately no chat_model. The challenger's model comes from
-        # its stored chat-agent row, resolved by Core (issue #68); holding one
-        # here only ever produced an argument the adapter discarded. The
-        # analyst's is real — finalise() falls back to it when no row exists.
+        # There is deliberately no chat_model and no analysis_model either now.
+        # The challenger's model comes from its stored chat-agent row, resolved
+        # by Core (issue #68); holding one here only ever produced an argument
+        # the adapter discarded. The analyst's used to be a genuine fallback
+        # held here, but issue #93 removed it: finalise() now requires a
+        # stored row and raises AgentConfigMissingError otherwise, so a value
+        # held here would be exactly the same dead argument the challenger's
+        # already taught this class not to carry.
         self._core = core
-        self._analysis_model = analysis_model
         self._min_turns = min_turns
         self._max_turns = max_turns
 
@@ -195,12 +223,14 @@ class IdeationService:
         its first turn — so nothing is re-passed here.
 
         The analyst's prompt/model are read live from the admin-configured
-        "analyst" role (ADR-0009 internal plugin-config read) when one exists,
-        falling back to the built-in default otherwise — e.g. before an admin or
-        the seed script has ever set one. Unlike the challenger (resolved
-        server-side by Core's chat-agent registry), the analyst sends its whole
-        definition inline on every call, so this plugin's own code is what has
-        to look the live config up."""
+        "analyst" role (ADR-0009 internal plugin-config read) — REQUIRED, no
+        fallback (issue #93). Both plugin apps seed this row at every cold
+        start (insert-if-absent), so a missing row here means seeding failed or
+        was skipped, and :class:`AgentConfigMissingError` says so by name
+        instead of silently reading ``ANALYST_INSTRUCTIONS``. Unlike the
+        challenger (resolved server-side by Core's chat-agent registry), the
+        analyst sends its whole definition inline on every call, so this
+        plugin's own code is what has to look the live config up."""
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         if session.status != GATHERING:
             raise NotGatheringError(session.status)
@@ -208,16 +238,16 @@ class IdeationService:
             raise NotEnoughTurnsError(session.turn_count)
 
         analyst_config = await self._core.get_own_config(role="analyst")
-        model = analyst_config["model"] if analyst_config else self._analysis_model
-        definition_kwargs: dict[str, Any] = {"model": model}
-        if analyst_config:
-            definition_kwargs["instructions"] = analyst_config["system_prompt"]
+        if analyst_config is None:
+            raise AgentConfigMissingError("analyst")
 
         run_id = await self._core.request_analysis(
             thread_id=session.thread_id,
             owner_sub=owner_sub,
             agent_name=ANALYST_AGENT_NAME,
-            definition=analyst_definition(**definition_kwargs),
+            definition=analyst_definition(
+                model=analyst_config["model"], instructions=analyst_config["system_prompt"]
+            ),
             output_tool=report_tool_schema(),
         )
         await self._core.set_status(session_id=session_id, status=ANALYSING, analysis_run_id=run_id)

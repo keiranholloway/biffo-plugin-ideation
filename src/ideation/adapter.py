@@ -20,6 +20,11 @@ Seam mapping (all under ``/api/v1``):
   never this plugin's (ADR-0016 §1). The port has no parameter for either.
 - the async analysis → read the thread's conversation, then create an agent run
   carrying the analyst definition + the report *output tool* (ADR-0017 §4).
+- this plugin's own agent config → ``/internal/plugins/me/config`` (ADR-0009):
+  ``GET .../{role}`` reads one role live; ``POST .../seed`` (``seed_own_config``)
+  seeds both roles insert-if-absent at startup (issue #93) — SigV4-only, no
+  forwarded founder token, resolved from the caller's own service identity so
+  a plugin can never seed another's config.
 """
 
 from __future__ import annotations
@@ -244,14 +249,22 @@ class CoreHttpGateway:
     async def get_own_config(self, *, role: str) -> dict[str, Any] | None:
         """The live, admin-editable config for one of this plugin's own roles
         (e.g. "analyst"), via the SigV4-only internal read (no forwarded founder
-        token needed — this data isn't founder-owned). None if never configured
-        (e.g. before an admin/seed script has set one) — the caller falls back
-        to a built-in default in that case."""
+        token needed — this data isn't founder-owned). None if never configured.
+        Rows are guaranteed to exist at startup via seeding (issue #93); the
+        caller (``IdeationService.finalise``) no longer falls back to a built-in
+        default on ``None`` — it raises ``AgentConfigMissingError`` instead."""
         try:
             row = await self._t.request("GET", f"{_PLUGIN_CONFIG}/{role}")
         except CoreNotFoundError:
             return None
         return {"system_prompt": row["system_prompt"], "model": row["model"]}
+
+    async def seed_own_config(self, *, config: list[dict[str, Any]]) -> list[dict[str, bool]]:
+        """Seed all roles at once, insert-if-absent (issue #93). SigV4-only —
+        resolved from this plugin's own service identity, so no plugin can seed
+        another's config."""
+        rows = await self._t.request("POST", f"{_PLUGIN_CONFIG}/seed", json=config)  # type: ignore[arg-type]
+        return list(rows)
 
     async def list_active_agents(self, *, role: str) -> list[dict[str, Any]]:
         rows = await self._t.request("GET", _PLUGIN_CONFIG, params={"role": role})

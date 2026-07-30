@@ -17,6 +17,17 @@ module never calls an LLM itself:
 These prompts are the module's *built-in capability* (like ADR-0016's prompt
 assistant's own prompt), not user-authored worker definitions. The model each
 agent runs on is a module config value, not per-user.
+
+``CHALLENGER_INSTRUCTIONS`` and ``ANALYST_INSTRUCTIONS`` below are **seed data
+only, never a runtime fallback** (issue #93). Both plugin apps write them into
+``plugin_chat_agents`` (keyed by ``CHALLENGER_AGENT_NAME``/``ANALYST_AGENT_NAME``,
+via ``ideation.effective_config.builtin_chat_agents()``) on every cold start,
+insert-if-absent — see ``app.py``/``admin_app.py``'s ``_seed_agent_config``. If a
+row is genuinely missing at request time, the plugin errors rather than reading
+these constants: Core's chat-turn spine 404s for the challenger, and
+``IdeationService.finalise`` raises ``AgentConfigMissingError`` for the analyst.
+Neither of these two module attributes is read anywhere except by the seed
+payload builder and this module's own tests.
 """
 
 from __future__ import annotations
@@ -189,15 +200,18 @@ def challenger_definition(*, model: str) -> dict[str, Any]:
     }
 
 
-def analyst_definition(*, model: str, instructions: str = ANALYST_INSTRUCTIONS) -> dict[str, Any]:
+def analyst_definition(*, model: str, instructions: str) -> dict[str, Any]:
     """The async analysis agent: web search to research, then the report *output
     tool* to return structured output. ``max_turns`` allows several tool-use turns
     before the final structured answer.
 
-    ``instructions`` defaults to the built-in ``ANALYST_INSTRUCTIONS`` but can be
-    overridden — the caller (``IdeationService.finalise``) passes the live,
-    admin-editable prompt when one is configured, falling back to this default
-    otherwise (e.g. before an admin has ever set one).
+    ``instructions`` is **required, with no built-in default**. The caller
+    (``IdeationService.finalise``) always passes the live, stored, admin-editable
+    prompt — there is no code-level fallback to ``ANALYST_INSTRUCTIONS`` any
+    more (issue #93). ``ANALYST_INSTRUCTIONS`` is seed data only: it is what
+    startup seeding writes into the row the first time, never a value this
+    function reaches for at request time. A default parameter here would be
+    exactly that runtime fallback, reintroduced one call site up.
 
     Search is the model's, not ours. This used to declare the ``web_search``
     registry tool, which is only offered when the deployment has a Brave

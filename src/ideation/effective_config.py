@@ -1,19 +1,28 @@
 """What the Ideation Engine is *actually* running on — defaults included.
 
-The two prompts are constants in :mod:`ideation.definitions`. The two models
-are **not** symmetrical, and the difference is the whole point of this module:
+The two prompts are constants in :mod:`ideation.definitions`. As of issue #93
+the two models (and the two roles generally) are **symmetrical, and neither has
+a runtime fallback**:
 
-- The **analyst** model genuinely falls back to the built-in below.
-  ``IdeationService.finalise`` reads the stored row live (``get_own_config``)
-  and uses :func:`analysis_model` only when there is no row.
-- The **challenger** model has no such fallback. The plugin sends Core no model
-  at all (see ``adapter.run_chat_turn``); with ``chat_agents_dynamic: true`` in
-  the manifest, Core resolves the model from the stored chat-agent row and has
+- The **challenger** model has no fallback. The plugin sends Core no model at
+  all (see ``adapter.run_chat_turn``); with ``chat_agents_dynamic: true`` in the
+  manifest, Core resolves the model from the stored chat-agent row and has
   nothing to resolve when that row is missing — a chat turn 404s rather than
-  running on a default (``scripts/seed_chat_agents.py``'s docstring says so).
-  So :func:`chat_model` is a **seed value**, not a runtime fallback: it is what
-  a seed/"store a copy" write would put *into* the row, and it never reaches a
-  request.
+  running on a default.
+- The **analyst** model no longer falls back either. ``IdeationService.finalise``
+  reads the stored row live (``get_own_config``) and, since issue #93 removed
+  the fallback, raises ``AgentConfigMissingError`` when there is no row instead
+  of reading :func:`analysis_model`.
+
+So :func:`chat_model` and :func:`analysis_model` are both **seed values**, not
+runtime fallbacks: each is what startup seeding (or the panel's "store a copy
+to edit") writes *into* the row the first time, and neither is consulted again
+once written. What used to be this module's headline distinction — "the
+analyst genuinely falls back, the challenger doesn't" — is gone: both roles now
+guarantee a row exists via seeding (``app.py``/``admin_app.py``'s
+``_seed_agent_config``, insert-if-absent, every cold start) and both fail
+loudly if that guarantee was somehow not met, rather than silently reading a
+built-in constant.
 
 This module used to report both as "the model in use, from the built-in
 default", which was true of neither once a row existed and was never true of
@@ -23,9 +32,10 @@ what the admin panel claimed was running without changing what ran.
 them; it cannot be called without deciding what is stored.
 
 This is still the single place the defaults are named, so the things that must
-agree provably do: what ``scripts/seed_chat_agents.py`` would store, what
-:mod:`ideation.app` falls back to for the analyst, and what the admin panel
-shows.
+agree provably do: what ``scripts/seed_chat_agents.py`` posts, what both
+plugin apps' startup seeding writes, and what the admin panel shows. All three
+build their payload from :func:`builtin_chat_agents` — the one place the seed
+payload is built, so they cannot drift from one another.
 
 The agent payloads carry ``system_prompt``. That is fine here and only here:
 every caller of this module is admin-gated (``admin_app.require_admin``), which
@@ -53,8 +63,8 @@ ANALYST_ROLE = "analyst"
 
 #: The environment variables that override the built-in model choices, and the
 #: values used when they are unset. Nothing in this deployment sets either var.
-#: ``IDEATION_CHAT_MODEL`` only changes what a *seed* would write (see the module
-#: docstring); ``IDEATION_ANALYSIS_MODEL`` is a real runtime fallback.
+#: Neither is a runtime fallback (issue #93 removed the analyst's) — both only
+#: change what a *seed* would write (see the module docstring).
 CHAT_MODEL_ENV = "IDEATION_CHAT_MODEL"
 ANALYSIS_MODEL_ENV = "IDEATION_ANALYSIS_MODEL"
 DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4"
@@ -73,11 +83,11 @@ DEFAULT_CHAT_MODEL = "anthropic/claude-sonnet-4"
 DEFAULT_ANALYSIS_MODEL = "anthropic/claude-opus-4.8:online"
 
 #: ``source`` values on the payloads below — where a value actually came from.
-#: ``stored``/``unconfigured`` are facts about the chat-agent table; the other
-#: three are only reachable where a built-in fallback genuinely exists, or where
-#: the table could not be read at all.
-SOURCE_BUILT_IN = "built-in"
-SOURCE_ENV = "env"
+#: Since issue #93 there is no runtime fallback for either role, so only two
+#: real states exist for a readable table: ``stored`` or ``unconfigured``.
+#: ``SOURCE_BUILT_IN``/``SOURCE_ENV`` are gone with the analyst's fallback they
+#: described — a value from the environment or the built-in constant is never
+#: what a request runs on any more, only what a seed would write.
 #: A stored row is what runs — the built-in below is not consulted.
 SOURCE_STORED = "stored"
 #: Nothing is stored and there is no fallback: the request path fails.
@@ -98,20 +108,30 @@ def chat_model() -> str:
 
 
 def analysis_model() -> str:
-    """The model the analyst runs on when no admin-configured row overrides it."""
+    """The model a *seed* of the analyst row would store — NOT a fallback since
+    issue #93 removed it. ``finalise()`` reads only the stored row and raises
+    ``AgentConfigMissingError`` when there isn't one; this value reaches a
+    request only by having been written into that row (by startup seeding,
+    ``scripts/seed_chat_agents.py``, or the panel's "store a copy to edit")."""
     return os.environ.get(ANALYSIS_MODEL_ENV) or DEFAULT_ANALYSIS_MODEL
 
 
-def _model_source(env_var: str) -> str:
-    return SOURCE_ENV if os.environ.get(env_var) else SOURCE_BUILT_IN
-
-
 def builtin_chat_agents() -> list[dict[str, Any]]:
-    """The two agents the engine falls back to with an empty chat-agent table.
+    """The seed payload for both agent roles — the **one place** it is built.
 
-    Byte-for-byte what ``scripts/seed_chat_agents.py`` posts, because that
-    script builds its payloads from this function — a stored row must be a copy
-    of the default it replaces, not a second, drifting definition of it.
+    Both plugin apps' startup seeding (``app.py``/``admin_app.py``'s
+    ``_seed_agent_config``), ``scripts/seed_chat_agents.py``, and the admin
+    panel's "store a copy to edit" action all call this function rather than
+    each building their own copy, so the three cannot drift apart (issue #93,
+    mirroring ``biffo-plugin-idea-scout#68``'s ``seed_config_payloads``).
+
+    These are also the two agents the panel displays when the chat-agent table
+    is empty — the defaults a seed would write, shown so an empty table never
+    reads as "nothing is configured" (issue #58). They are seed data, not a
+    runtime fallback: since issue #93, a request that finds no stored row for
+    either role fails (the challenger's chat turn 404s server-side; the
+    analyst's ``finalise()`` raises ``AgentConfigMissingError``) rather than
+    running on what this function returns.
     """
     return [
         {
@@ -237,7 +257,7 @@ def _analysis_entry(*, unknown: bool, row: Mapping[str, Any] | None) -> dict[str
         "label": "Analyst (PRD + viability scorecard)",
         "agent_key": ANALYST_AGENT_NAME,
         "env_var": ANALYSIS_MODEL_ENV,
-        "env_var_is_runtime_fallback": True,
+        "env_var_is_runtime_fallback": False,
         "builtin_model_id": analysis_model(),
     }
     if unknown:
@@ -247,8 +267,7 @@ def _analysis_entry(*, unknown: bool, row: Mapping[str, Any] | None) -> dict[str
             "source": SOURCE_UNKNOWN,
             "detail": (
                 "Could not read the stored chat-agent rows from Core, so it is unknown "
-                "whether the analyst is running on a stored row or on the built-in "
-                "default below."
+                "whether the analyst has a configured row at all."
             ),
         }
     if row is not None:
@@ -264,10 +283,12 @@ def _analysis_entry(*, unknown: bool, row: Mapping[str, Any] | None) -> dict[str
         }
     return {
         **entry,
-        "model_id": analysis_model(),
-        "source": _model_source(ANALYSIS_MODEL_ENV),
+        "model_id": None,
+        "source": SOURCE_UNCONFIGURED,
         "detail": (
-            f"No stored active {ANALYST_ROLE} row, so finalise() falls back to this "
-            "plugin's own value. Storing a row overrides it."
+            f"No stored active {ANALYST_ROLE} row. Since issue #93 there is no fallback — "
+            f"finalise() raises rather than reading this plugin's own value, so every "
+            f"analysis fails until one is seeded — {ANALYSIS_MODEL_ENV} and the built-in "
+            "below do not fill the gap, they only decide what a seed would write."
         ),
     }

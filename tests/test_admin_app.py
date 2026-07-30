@@ -246,16 +246,17 @@ class TestEffectiveConfigRoute:
     ) -> None:
         """With chat_agents_dynamic on, no stored challenger row means Core has
         nothing to resolve and every chat turn 404s. Reporting a plausible
-        built-in model id there hides a broken deployment."""
+        built-in model id there hides a broken deployment. Since issue #93 the
+        analyst is no exception any more: its runtime fallback is gone too, so
+        an empty table means neither role reports a model in use."""
         core_mock.return_value = []
 
         models = {m["purpose"]: m for m in client.get("/effective-config").json()["models"]}
 
         assert models["chat"]["source"] == "unconfigured"
         assert models["chat"]["model_id"] is None
-        # The analyst's fallback is real, so it still reports a model.
-        assert models["analysis"]["source"] in {"built-in", "env"}
-        assert models["analysis"]["model_id"]
+        assert models["analysis"]["source"] == "unconfigured"
+        assert models["analysis"]["model_id"] is None
 
 
 class TestAuthGating:

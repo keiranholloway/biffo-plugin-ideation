@@ -4,7 +4,9 @@ import { ModelSelect } from './ModelSelect'
 
 interface AgentListProps {
   agents: ChatAgent[]
-  /** The agents the engine falls back to when no stored row overrides them. */
+  /** The built-in defaults — what seeding writes into a role's row when none
+   * exists yet. Not a runtime fallback (issue #93): if a row is genuinely
+   * missing, the request path fails rather than running on these. */
   builtins: BuiltinAgent[]
   /** The curated list the model is chosen from (issue #67). */
   catalogEntries: ModelCatalogEntry[]
@@ -77,8 +79,10 @@ export function AgentList({
     <>
       {agents.length === 0 && (
         <p className="admin-note">
-          No agents are stored. The engine is running on the built-in defaults below — it is
-          configured, just not from this table.
+          No agents are stored. These are the built-in defaults — the values that seeding writes
+          automatically into this table on every cold start. If you are seeing this in a deployed
+          environment, seeding has not completed yet: requests using an unseeded role will fail
+          until it has.
         </p>
       )}
 

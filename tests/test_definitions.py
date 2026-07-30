@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from ideation.definitions import (
+    ANALYST_INSTRUCTIONS,
     MAX_TURNS,
     MIN_TURNS,
     PRD,
@@ -49,7 +50,9 @@ def test_challenger_is_a_single_turn_conversation_agent() -> None:
 
 
 def test_analyst_researches_then_returns_structured_output() -> None:
-    d = analyst_definition(model="anthropic/claude-opus-4.8:online")
+    d = analyst_definition(
+        model="anthropic/claude-opus-4.8:online", instructions=ANALYST_INSTRUCTIONS
+    )
     # No registry tools at all. web_search is only offered when the deployment has
     # a Brave credential; dev has none, so declaring it got the tool dropped
     # silently and left the analyst instructed to use something it never had.
@@ -64,6 +67,16 @@ def test_analyst_researches_then_returns_structured_output() -> None:
     # passing off recalled competitors as research when no results arrive.
     assert "web_search" not in instr
     assert "unverified" in instr
+
+
+def test_analyst_definition_has_no_instructions_default() -> None:
+    """Issue #93: ``instructions`` used to default to ``ANALYST_INSTRUCTIONS``,
+    which was the runtime fallback ``IdeationService.finalise`` leaned on when
+    no row was stored. The fallback is gone, and so is the default that let a
+    caller reach it by accident — every caller must now pass the live,
+    stored prompt explicitly."""
+    with pytest.raises(TypeError):
+        analyst_definition(model="anthropic/claude-opus-4.8:online")  # type: ignore[call-arg]
 
 
 def test_report_tool_schema_is_the_report_model() -> None:

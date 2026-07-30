@@ -16,17 +16,20 @@ Mangum handler.
 
 from __future__ import annotations
 
+import logging
+
 from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .adapter import CoreHttpGateway
+from .adapter import CoreHttpError, CoreHttpGateway
 from .definitions import MAX_TURNS, MIN_TURNS
-from .effective_config import analysis_model
+from .effective_config import builtin_chat_agents
 from .models import ANALYSING, GATHERING
 from .service import (
+    AgentConfigMissingError,
     AnalysisFailedError,
     IdeationError,
     IdeationService,
@@ -38,15 +41,7 @@ from .service import (
 )
 from .transport import CoreTransport
 
-#: The analyst's fallback model, resolved by ``effective_config`` rather than
-#: read from the environment here, so the admin panel's "what is actually in
-#: use" view and this request path cannot disagree (issue #58).
-#:
-#: There is no chat equivalent. The challenger's model lives in its stored
-#: chat-agent row and Core resolves it; a value held here was passed to the
-#: adapter and discarded, which read as agreement with the panel while being no
-#: such thing (issue #68).
-_ANALYSIS_MODEL = analysis_model()
+_LOGGER = logging.getLogger(__name__)
 
 #: The founder gate — verifies the shared-Cognito JWT and requires the group. The
 #: verified user carries its raw token, forwarded to Core by the transport.
@@ -55,12 +50,53 @@ require_founder = require_group("founder")
 
 def get_service(founder: ForwardedUser = Depends(require_founder)) -> IdeationService:
     """One :class:`IdeationService` per request, bound to Core over a transport that
-    signs as this Lambda AND forwards *this* founder's token."""
+    signs as this Lambda AND forwards *this* founder's token.
+
+    Holds no model of either agent's own any more (issue #93): the challenger's
+    lives in its stored chat-agent row, Core-resolved; the analyst's used to be
+    a genuine fallback held here (``_ANALYSIS_MODEL``), but ``finalise()`` now
+    requires a stored row and raises rather than falling back, so a value held
+    here would be exactly the discarded-argument shape issue #68 already
+    removed for the challenger."""
     transport = CoreTransport(founder_token=founder.token)
-    return IdeationService(CoreHttpGateway(transport), analysis_model=_ANALYSIS_MODEL)
+    return IdeationService(CoreHttpGateway(transport))
 
 
 app = FastAPI(title="Ideation Engine", docs_url=None, redoc_url=None)
+
+
+@app.on_event("startup")
+async def _seed_agent_config() -> None:
+    """Seed both agent roles on startup, tolerating a transient Core failure.
+
+    Guarantees a row exists for both ``ideation-challenger`` and
+    ``ideation-analyst`` so a fresh deployment does not run silently on the
+    constants in ``definitions.py`` (issue #93) — the same table
+    ``scripts/seed_chat_agents.py`` used to require a manual, one-time
+    operator run against. Insert-if-absent (``seed_own_config`` /
+    ``POST /internal/plugins/me/config/seed``): an admin's edited prompt is
+    never overwritten, on this or any later cold start.
+
+    If Core is briefly unavailable at cold start, the app continues anyway —
+    logged loudly rather than wedging startup. The absence then fails loudly at
+    request time instead: a chat turn 404s (challenger), and ``finalise()``
+    raises :class:`AgentConfigMissingError` (analyst)."""
+    try:
+        transport = CoreTransport(founder_token="")
+        gateway = CoreHttpGateway(transport)
+        result = await gateway.seed_own_config(config=builtin_chat_agents())
+        created = sum(1 for r in result if r.get("created"))
+        already_present = len(result) - created
+        _LOGGER.info(
+            "Seeded %d new agent config row(s); %d already present", created, already_present
+        )
+    except CoreHttpError:
+        _LOGGER.exception(
+            "Failed to seed agent config at startup (Core may be unavailable). "
+            "Chat turns and analysis runs will fail loudly if a role's row is "
+            "genuinely missing."
+        )
+
 
 # Orchestration errors → HTTP. Registered once for the base class; the map keys on
 # the concrete type. Anything unmapped is a 400 (a bad request the founder can fix).
@@ -71,6 +107,10 @@ _ERROR_STATUS: dict[type[IdeationError], int] = {
     NotEnoughTurnsError: 422,
     AnalysisFailedError: 502,
     MalformedReportError: 502,
+    # Startup seeding should mean this never happens, but if it does (seeding
+    # failed/was skipped), 502: it's a plugin-side misconfiguration, not
+    # something the founder's request can fix (issue #93).
+    AgentConfigMissingError: 502,
 }
 
 

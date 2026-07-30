@@ -85,17 +85,24 @@ describe('AgentList', () => {
   })
 
   // ── issue #58: an empty table is not an unconfigured engine ────────────────
+  // ── issue #93: nor is it "running on the built-ins" any more ───────────────
 
   it('shows the built-in defaults instead of claiming nothing is defined', () => {
     render(<AgentList agents={[]} builtins={mockBuiltins} {...noopProps()} />)
 
     // The old copy — "No agents defined yet." — described the table and
-    // contradicted the engine, which runs on the default below.
+    // contradicted the engine, which used to run on the default below.
     expect(screen.queryByText('No agents defined yet.')).not.toBeInTheDocument()
     // Name and key, so two matches.
     expect(screen.getAllByText('ideation-challenger').length).toBeGreaterThan(0)
     expect(screen.getByText('Default — not stored')).toBeInTheDocument()
-    expect(screen.getByText(/running on the built-in defaults/)).toBeInTheDocument()
+    // Since issue #93 neither role has a runtime fallback any more, so this
+    // note must not claim the engine is "running on" these — it never runs on
+    // them, it errors if a row is genuinely missing. It still shows what
+    // seeding would write, which is what makes an empty table legible rather
+    // than a bare "nothing here".
+    expect(screen.getByText(/writes automatically/)).toBeInTheDocument()
+    expect(screen.queryByText(/running on the built-in defaults/)).not.toBeInTheDocument()
   })
 
   it('shows the prompt a built-in default is actually running', () => {

@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ideation.app import _derive_title, app, get_service, require_founder
+from ideation.definitions import ANALYST_INSTRUCTIONS
 from ideation.models import GATHERING, Run, Session, TurnResult
 from ideation.service import IdeationService
 
@@ -120,6 +121,23 @@ class FakeCore:
     async def get_own_config(self, *, role) -> dict[str, Any] | None:
         return self._own_config.get(role)
 
+    async def seed_own_config(self, *, config: list[dict[str, Any]]) -> list[dict[str, bool]]:
+        """Insert-if-absent, matching Core's real seed-route contract. Only
+        present so this fake satisfies ``CoreGateway`` structurally — the app
+        layer's own startup seeding is exercised in
+        ``tests/test_startup_seeding.py``, not through this fake."""
+        result = []
+        for row in config:
+            role = row["role"]
+            created = role not in self._own_config
+            if created:
+                self._own_config[role] = {
+                    "system_prompt": row["system_prompt"],
+                    "model": row["model"],
+                }
+            result.append({"role": role, "created": created})
+        return result
+
     async def list_active_agents(self, *, role) -> list[dict[str, Any]]:
         return self._active_agents.get(role, [])
 
@@ -148,7 +166,13 @@ def _tool_call() -> dict[str, Any]:
 
 @pytest.fixture
 def core() -> FakeCore:
-    return FakeCore()
+    core = FakeCore()
+    # Seed the analyst config, matching what startup seeding guarantees in the
+    # real app (issue #93) — finalise() has no fallback of its own any more, so
+    # a test exercising anything other than the missing-row case needs a row
+    # to exist, exactly like a real deployment does after cold start.
+    core._own_config["analyst"] = {"system_prompt": ANALYST_INSTRUCTIONS, "model": "analysis/m"}
+    return core
 
 
 @pytest.fixture
@@ -156,9 +180,7 @@ def client(core: FakeCore) -> Iterator[TestClient]:
     app.dependency_overrides[require_founder] = lambda: ForwardedUser(
         sub="alice", groups=["founder"], token="tok"
     )
-    app.dependency_overrides[get_service] = lambda: IdeationService(
-        core, analysis_model="analysis/m"
-    )
+    app.dependency_overrides[get_service] = lambda: IdeationService(core)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -245,6 +267,23 @@ def test_chat_after_finalise_is_409(client):
     client.post(f"/sessions/{sid}/finalise")
     resp = client.post(f"/sessions/{sid}/messages", json={"message": "more"})
     assert resp.status_code == 409  # NotGatheringError
+
+
+def test_finalise_without_a_seeded_analyst_row_is_502_and_names_the_role(client, core):
+    """Issue #93: with no analyst row (seeding failed or never ran), finalise()
+    must fail loudly and name the missing role — not silently read
+    ``ANALYST_INSTRUCTIONS``. The ``core`` fixture normally seeds this row
+    (matching what real startup seeding guarantees); this test removes it to
+    exercise the one case that guarantee is meant to prevent."""
+    core._own_config.pop("analyst", None)
+    sid = client.post("/sessions", json={"seed_idea": "idea"}).json()["session_id"]
+    client.post(f"/sessions/{sid}/messages", json={"message": "a"})
+    client.post(f"/sessions/{sid}/messages", json={"message": "b"})
+
+    resp = client.post(f"/sessions/{sid}/finalise")
+
+    assert resp.status_code == 502
+    assert "analyst" in resp.json()["detail"]
 
 
 def test_the_app_is_gated_without_a_token(core):
