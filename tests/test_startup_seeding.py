@@ -145,10 +145,16 @@ class TestBothAppsSeedAtStartup:
         module = importlib.import_module(module_name)
         monkeypatch.setattr(module, "CoreTransport", _StubTransport)
 
+        detail = (
+            "POST /api/v1/internal/plugins/me/config/seed -> 500: "
+            "duplicate key value violates unique constraint "
+            '"uq_plugin_chat_agent_key"'
+        )
+
         class _FailingGateway(_RecordingGateway):
             def __init__(self, transport: Any) -> None:
                 super().__init__(transport)
-                self.raise_on_seed = CoreHttpError("POST .../seed -> 503")
+                self.raise_on_seed = CoreHttpError(detail)
 
         monkeypatch.setattr(module, "CoreHttpGateway", _FailingGateway)
 
@@ -176,6 +182,15 @@ class TestBothAppsSeedAtStartup:
             module._LOGGER.setLevel(previous_level)
 
         assert any("seed" in record.getMessage().lower() for record in records)
+
+        # And it must report what Core actually said, not guess at a cause. The
+        # line used to read "(Core may be unavailable)"; on 2026-07-31 that fired
+        # in idea-scout while Core was up and had answered — with a 500 from its
+        # own unique constraint on a concurrent self-seed (biffo-template#924).
+        # The speculation was read as the diagnosis and cost the first theory.
+        logged = "\n".join(record.getMessage() for record in records)
+        assert detail in logged, logged
+        assert "may be unavailable" not in logged, logged
 
 
 class TestSeedingNeverOverwrites:
