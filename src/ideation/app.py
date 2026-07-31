@@ -77,10 +77,13 @@ async def _seed_agent_config() -> None:
     ``POST /internal/plugins/me/config/seed``): an admin's edited prompt is
     never overwritten, on this or any later cold start.
 
-    If Core is briefly unavailable at cold start, the app continues anyway —
-    logged loudly rather than wedging startup. The absence then fails loudly at
-    request time instead: a chat turn 404s (challenger), and ``finalise()``
-    raises :class:`AgentConfigMissingError` (analyst)."""
+    A failed seed is logged loudly rather than wedging startup, and the log
+    reports Core's actual response instead of guessing at a cause: it used to say
+    "Core may be unavailable", and in idea-scout that wording fired while Core was
+    up and had answered with a 500 from its own unique constraint
+    (biffo-template#924). The absence then fails loudly at request time instead:
+    a chat turn 404s (challenger), and ``finalise()`` raises
+    :class:`AgentConfigMissingError` (analyst)."""
     try:
         transport = CoreTransport(founder_token="")
         gateway = CoreHttpGateway(transport)
@@ -90,11 +93,12 @@ async def _seed_agent_config() -> None:
         _LOGGER.info(
             "Seeded %d new agent config row(s); %d already present", created, already_present
         )
-    except CoreHttpError:
+    except CoreHttpError as exc:
         _LOGGER.exception(
-            "Failed to seed agent config at startup (Core may be unavailable). "
+            "Failed to seed agent config at startup. Core's response: %s. "
             "Chat turns and analysis runs will fail loudly if a role's row is "
-            "genuinely missing."
+            "genuinely missing.",
+            exc,
         )
 
 

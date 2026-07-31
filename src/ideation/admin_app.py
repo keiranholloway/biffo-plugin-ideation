@@ -96,11 +96,12 @@ async def _seed_agent_config() -> None:
         _LOGGER.info(
             "Seeded %d new agent config row(s); %d already present", created, already_present
         )
-    except CoreHttpError:
+    except CoreHttpError as exc:
         _LOGGER.exception(
-            "Failed to seed agent config at startup (Core may be unavailable). "
+            "Failed to seed agent config at startup. Core's response: %s. "
             "Chat turns and analysis runs will fail loudly if a role's row is "
-            "genuinely missing."
+            "genuinely missing.",
+            exc,
         )
 
 
