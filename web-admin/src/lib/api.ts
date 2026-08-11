@@ -12,18 +12,16 @@
 //   hop; routing it through the admin app instead made the host call itself and
 //   then forward on to Core — three hops, and a 500 when they outran the
 //   client's timeout (biffo-template#652).
+//
+// The request core (fetch wrapper, bearer auth, error handling, base
+// resolution) is shared across every plugin's web-admin — see ./api-core.ts
+// (biffo-template#1492). Only this plugin's own endpoint surface lives here.
+import { createRequest, ApiError, type GetIdToken } from './api-core'
+
+export { ApiError }
+
 const ADMIN_BASE = '/api/v1/plugins/ideation/admin'
 const CATALOG_BASE = '/api/v1/plugins/ideation'
-
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
 
 export interface ChatAgent {
   agent_key: string
@@ -103,28 +101,8 @@ export interface EffectiveConfig {
 
 export type Api = ReturnType<typeof createApi>
 
-export function createApi(getIdToken: () => string | null | Promise<string | null>) {
-  async function request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-    base: string = ADMIN_BASE,
-  ): Promise<T> {
-    const token = await getIdToken()
-    const res = await fetch(`${base}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token != null ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    })
-    if (!res.ok) {
-      const detail = await res.text().catch(() => res.statusText)
-      throw new ApiError(res.status, detail)
-    }
-    return res.json() as Promise<T>
-  }
+export function createApi(getIdToken: GetIdToken) {
+  const request = createRequest(getIdToken, ADMIN_BASE)
 
   return {
     // What the engine is running on, stored or not
