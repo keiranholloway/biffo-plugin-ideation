@@ -50,7 +50,7 @@ export async function getCurrentSession(): Promise<CognitoUserSession | null> {
       return
     }
     user.getSession((err: Error | null, session: CognitoUserSession | null) => {
-      resolve(err ?? !session?.isValid() ? null : session)
+      resolve((err ?? !session?.isValid()) ? null : session)
     })
   })
 }
