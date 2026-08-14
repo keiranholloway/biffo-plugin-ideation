@@ -12,7 +12,6 @@ scoping, the two agent prompts (its actual IP), and report extraction.
 
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Any
 
@@ -28,6 +27,7 @@ from .definitions import (
     analyst_definition,
     report_tool_schema,
 )
+from .json_text import parse_json_text
 from .models import (
     ANALYSING,
     COMPLETE,
@@ -104,7 +104,7 @@ def extract_report(run_messages: list[dict[str, Any]]) -> Report:
             if function.get("name") != REPORT_TOOL_NAME:
                 continue
             arguments = function.get("arguments")
-            data = json.loads(arguments) if isinstance(arguments, str) else arguments
+            data = parse_json_text(arguments)
             try:
                 return Report.model_validate(data)
             except ValidationError as exc:

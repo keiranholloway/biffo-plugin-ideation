@@ -33,6 +33,7 @@ import json
 from typing import Any, Protocol
 
 from .definitions import CHALLENGER_AGENT_NAME
+from .json_text import parse_json_text
 from .models import GATHERING, Run, Session, TurnResult
 
 _ROOT = "/api/v1/internal"
@@ -66,15 +67,6 @@ class Transport(Protocol):
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any: ...
-
-
-def _load_json_column(value: Any) -> Any:
-    """Parse a Text column that holds JSON. Tolerates a dict (already parsed by a
-    JSON-typed transport) and None (returns None), so the caller need not care how
-    the value arrived."""
-    if isinstance(value, str):
-        return json.loads(value)
-    return value
 
 
 def _session_from_row(row: dict[str, Any]) -> Session:
@@ -241,8 +233,8 @@ class CoreHttpGateway:
             return None
         row = rows[0]
         return {
-            "prd": _load_json_column(row.get("prd")),
-            "scorecard": _load_json_column(row.get("scorecard")),
+            "prd": parse_json_text(row.get("prd")),
+            "scorecard": parse_json_text(row.get("scorecard")),
             "model": row.get("model"),
         }
 
