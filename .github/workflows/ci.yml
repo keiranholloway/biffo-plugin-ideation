@@ -31,6 +31,50 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+  # This repo has held scripts/py-dependency-audit.sh and
+  # scripts/js-dependency-audit.sh without invoking either — shared-sync
+  # delivers the SCRIPT into a repo, it cannot wire it into CI
+  # (biffo-template AGENTS.md §9). So neither this repo's Python dependencies
+  # (root pyproject.toml/uv.lock) nor its two JS trees (web/, web-admin/) had
+  # ever been scanned by this repo's own CI — a js-yaml/nanoid advisory pair
+  # in web/ and web-admin/'s lockfiles was found only from DOWNSTREAM, by
+  # biffo-platform's audit walking a vendored copy (fixed here in #138).
+  #
+  # One job, matching biffo-plugin-idea-scout's "Dependency Audit" job/check
+  # name so the two repos' PR check lists converge rather than diverge
+  # further. Both scripts discover every lockfile/lockfile-equivalent tree by
+  # walking from the git root (#1270), so a single invocation of each from the
+  # repo root covers web/ and web-admin/ (JS) and the root uv.lock (Python)
+  # with no per-tree invocation needed — verified locally before this job was
+  # added.
+  #
+  # Neither step gets `continue-on-error` or `|| true`. Both scripts already
+  # distinguish "found a real advisory" (exit 1) from "could not determine"
+  # (exit 2, e.g. an unparseable registry response or a missing tool) — see
+  # each script's own header — and an audit that cannot run must BLOCK, not
+  # pass. `pip-audit` is declared in this repo's `[dependency-groups].dev`
+  # already, so `uv sync --all-groups` is sufficient for the Python side; the
+  # JS side needs only the `pnpm` binary (no `pnpm install`/lockfile install
+  # required — `pnpm audit` reads the committed lockfile directly, confirmed
+  # locally with node_modules absent).
+  security-deps:
+    name: Dependency Audit
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --all-groups
+      - name: Python dependency audit
+        run: sh scripts/py-dependency-audit.sh
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: JS dependency audit
+        run: sh scripts/js-dependency-audit.sh
+
   frontend:
     name: Frontend (lint, types, test, build)
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
