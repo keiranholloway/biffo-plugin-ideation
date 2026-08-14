@@ -161,10 +161,16 @@ class TestBothAppsSeedAtStartup:
         # Capture from the module's OWN logger rather than through `caplog`,
         # which depends on propagation reaching the root handler. That held here
         # and did not hold in the instance: vendored into `biffo-platform`, this
-        # test runs in a suite that also imports Core, whose AWS Lambda Powertools
-        # `Logger()` reconfigures logging and disables propagation. The assertion
-        # then failed for a reason that has nothing to do with what it tests —
-        # green upstream, red downstream, on identical code.
+        # test runs in a suite that also runs Core's Alembic migrations, whose
+        # `env.py` calls `logging.config.fileConfig()` — which defaults to
+        # `disable_existing_loggers=True` and disables every logger already
+        # constructed when it runs. (Not Core's Powertools `Logger()`: measured
+        # directly, importing Core's `api.main` leaves a third-party module's own
+        # logger working fine.) The assertion then failed for a reason that has
+        # nothing to do with what it tests — green upstream, red downstream, on
+        # identical code. Fixed upstream in biffo-template's
+        # services/api/migrations/env.py (disable_existing_loggers=False); this
+        # test's own-logger capture needs no defensive change and should stay.
         records: list[logging.LogRecord] = []
 
         class _Capture(logging.Handler):
