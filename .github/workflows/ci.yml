@@ -72,6 +72,17 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 9
+      # No `cache: pnpm` here, unlike the frontend/admin-frontend jobs below.
+      # Those jobs run `pnpm install`, which populates a store worth caching.
+      # This job never does — `pnpm audit` reads the committed lockfile and
+      # queries the registry directly, so no store is ever populated, and
+      # asking actions/setup-node to save an empty one fails the job at the
+      # post-step with "Path Validation Error: Path(s) specified in the
+      # action for caching do(es) not exist" (hit by biffo-plugin-idea-scout's
+      # equivalent job before this one was written).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: JS dependency audit
         run: sh scripts/js-dependency-audit.sh
 
