@@ -1,11 +1,14 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
-// Served path-routed at <base>/ideation/* on the shared CloudFront (ADR-0018),
-// so every asset/link URL must carry the /ideation/ prefix. The parent CDN
-// forwards the full path to this app's S3 origin with no prefix stripping.
+// Served by the shared plugin host at /api/v1/plugins/ideation/ui/* (the API
+// Gateway path, not a separate CloudFront/S3 origin) — every asset/link URL
+// must carry that full prefix. See web-admin/vite.config.ts for what happens
+// when it doesn't: a missing segment 404s at the host and CloudFront's
+// 404->index.html custom error response papers over it as a 200 serving the
+// portal's homepage, so the browser tries to parse HTML as JS.
 export default defineConfig({
-  base: '/ideation/',
+  base: '/api/v1/plugins/ideation/ui/',
   plugins: [react()],
   // amazon-cognito-identity-js's `buffer` dependency references Node's `global`,
   // which Vite (unlike webpack/CRA) does not polyfill — without this the app
