@@ -1,0 +1,10 @@
+{
+  "total": 5,
+  "branches": [
+    "scripts/error_branch_coverage.py:except:except SyntaxError",
+    "scripts/error_branch_coverage.py:except:except ValueError",
+    "scripts/error_branch_coverage.py:fallback:if node.type is None -> 'except:'",
+    "scripts/error_branch_coverage.py:fallback:if not baseline.is_file() -> None",
+    "src/ideation/service.py:fallback:if session.status != ANALYSING or session.analysis_ru -> None"
+  ]
+}

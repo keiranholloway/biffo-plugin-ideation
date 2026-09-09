@@ -28,8 +28,26 @@ jobs:
         run: uv run ruff format --check .
       - name: Type check
         run: uv run pyright src tests
+      # `--cov-report=json` is not a second copy for reporting's sake --
+      # `scripts/error_branch_coverage.py` (below) reads `coverage.json` and
+      # nothing else. Without this flag the gate step has no input and exits 2
+      # ("no coverage data"), which is the gate failing to run rather than the
+      # gate passing -- same pairing biffo-plugin-marketing's ci.yml uses.
       - name: Test
-        run: uv run pytest -q
+        run: uv run pytest -q --cov --cov-report=json
+      # Fails only when error handling is ADDED with nothing exercising it
+      # (biffo-template#956). An unexecuted `except` is unverified -- nobody has
+      # ever observed what it does -- and that is where this estate's fail-opens
+      # have actually lived. A ratchet, not a hard gate: pre-existing unexecuted
+      # branches are recorded in the committed baseline
+      # (docs/practices/error-branch-baseline.json) and do not block; only a
+      # NEW one does.
+      #
+      # `scripts/error_branch_coverage.py` is byte-identical to
+      # `biffo-template/scripts/error_branch_coverage.py` (shared-sync
+      # distributed). Do not edit it here -- edit it upstream.
+      - name: Error-branch coverage
+        run: uv run python scripts/error_branch_coverage.py --check --coverage coverage.json
 
   # This repo has held scripts/py-dependency-audit.sh and
   # scripts/js-dependency-audit.sh without invoking either — shared-sync
