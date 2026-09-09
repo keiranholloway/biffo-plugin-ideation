@@ -49,6 +49,67 @@ jobs:
       - name: Error-branch coverage
         run: uv run python scripts/error_branch_coverage.py --check --coverage coverage.json
 
+  # This repo had no secret scanning at all -- no CI job, no .gitleaks.toml,
+  # while .githooks/pre-push's own claim guard comment named gitleaks as part
+  # of "the WHOLE gate" (#143). Ported from biffo-plugin-idea-scout's
+  # "Secret Scan" job (ci.yml:122-167), the closer sibling: it carries no
+  # per-repo `commits = [...]` allowlist, unlike biffo-plugin-marketing's
+  # (which exists only to exempt already-merged fixture commits from a rule
+  # this repo does not need). `.gitleaks.toml` here matches
+  # biffo-plugin-marketing's current (post-#188) minimal stub -- title plus
+  # `useDefault = true`, no repo-specific rules -- rather than
+  # biffo-plugin-idea-scout's (it has none) or biffo-template's (its
+  # `biffo-placeholder-config` rule targets `biffo.config.json`, a
+  # core-project file this plugin repo does not have).
+  #
+  # gitleaks/gitleaks-action@v2 (what the plugin skeleton ships) does not work
+  # here, for two independent reasons both idea-scout's and marketing's ci.yml
+  # already document:
+  #   1. On the self-hosted runner fleet the action's SARIF upload dies with
+  #      "The rootDirectory: /home/ec2-user is not a parent directory of the
+  #      file: .../results.sarif" -- the scan itself passes and the job still
+  #      fails.
+  #   2. It requires a paid GITLEAKS_LICENSE for organization-owned repos.
+  #      This repo is personal today, but the moment it moves under an org
+  #      the check breaks silently.
+  # Install the free, open-source gitleaks CLI directly instead -- same
+  # detection, no artifact upload, no license. Pinned to v8.30.1 (matching
+  # both sibling repos) with a sha256sum check against the release's own
+  # published checksum.
+  security-secrets:
+    name: Secret Scan
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+      # First pass: scan git history (fetch-depth: 0 above), catching secrets
+      # committed then removed within the same history.
+      #
+      # --log-opts is load-bearing: gitleaks' default git log arguments
+      # include `--all`, so with fetch-depth: 0 the scan covers commits that
+      # live only on *unmerged* branches -- one bad commit on anyone's open
+      # branch then reddens dev and every open PR at once, with nothing in
+      # the built ref responsible for it. Scoping to HEAD restricts the scan
+      # to commits reachable from the ref under test without weakening
+      # detection.
+      - name: gitleaks git history scan
+        run: gitleaks detect --redact -v --exit-code=2 --log-opts="--full-history HEAD"
+      # Second pass: scan every file in the working tree (no-git mode), so
+      # secrets sitting in files no commit under test touched are caught too.
+      - name: gitleaks filesystem scan
+        run: gitleaks detect --no-git --redact -v --exit-code=2
+
   # This repo has held scripts/py-dependency-audit.sh and
   # scripts/js-dependency-audit.sh without invoking either — shared-sync
   # delivers the SCRIPT into a repo, it cannot wire it into CI
