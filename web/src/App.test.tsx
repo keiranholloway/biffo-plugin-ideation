@@ -876,16 +876,17 @@ describe('App', () => {
 })
 
 // The reporter's route in keiranholloway/biffo-platform-app#4: navigate straight
-// to https://dev.biffo.io/ideation/ rather than going through the dashboard,
-// which has its own (client-side) gate. The static shell is served publicly from
-// S3/CloudFront and cannot check a group, so the SPA has to do the bounce that
-// `user_frontend.required_group` declares (ADR-0018 §2). This is UX only — the
-// server enforces the same group at API Gateway, at the shared plugin host's
-// group_gate, and again in the plugin's own require_group("founder").
-describe('App founder-group gate (direct navigation to /ideation/)', () => {
+// to https://dev.biffo.io/api/v1/plugins/ideation/ui/ rather than going through
+// the dashboard, which has its own (client-side) gate. The static shell is
+// served by the shared plugin host and cannot check a group, so the SPA has to
+// do the bounce that `user_frontend.required_group` declares (ADR-0018 §2).
+// This is UX only — the server enforces the same group at API Gateway, at the
+// shared plugin host's group_gate, and again in the plugin's own
+// require_group("founder").
+describe('App founder-group gate (direct navigation to /api/v1/plugins/ideation/ui/)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    window.history.replaceState({}, '', '/ideation/')
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/')
   })
 
   it('refuses to render the engine for a signed-in user with no founder group', async () => {
@@ -1094,11 +1095,11 @@ describe('App founder-group gate (direct navigation to /ideation/)', () => {
 describe('App ?seed= deep-link', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    window.history.replaceState({}, '', '/ideation/')
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/')
   })
 
   async function renderWithUrl(search: string) {
-    window.history.replaceState({}, '', `/ideation/${search}`)
+    window.history.replaceState({}, '', `/api/v1/plugins/ideation/ui/${search}`)
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
     mockFetch(200, [])
     render(<App />)
@@ -1126,7 +1127,7 @@ describe('App ?seed= deep-link', () => {
   it('does not auto-start a session from ?seed=', async () => {
     const fetchSpy = mockFetch(200, [])
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
-    window.history.replaceState({}, '', '/ideation/?seed=an%20idea')
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/?seed=an%20idea')
 
     render(<App />)
     await screen.findByLabelText('Your idea')

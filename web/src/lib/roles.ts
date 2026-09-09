@@ -14,7 +14,8 @@ import type { CognitoUserSession } from 'amazon-cognito-identity-js'
 //      Core owner-scopes every read/write off the forwarded token.
 //
 // What this file buys is the bounce ADR-0018 §2 says `required_group` provides:
-// without it a signed-in non-founder who navigates straight to /ideation/ gets
+// without it a signed-in non-founder who navigates straight to
+// /api/v1/plugins/ideation/ui/ gets
 // the entire chat UI rendered and only discovers they are not allowed when each
 // individual request comes back "403: This surface requires the 'founder'
 // group." (keiranholloway/biffo-platform-app#4).
