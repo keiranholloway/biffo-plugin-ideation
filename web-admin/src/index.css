@@ -294,6 +294,19 @@ p {
   margin-bottom: 1rem;
 }
 
+/* Same shape as .admin-note, but for a state that needs fixing rather than
+   just explaining itself — e.g. ModelSelect's "this role needs search and
+   nothing in the catalog can" (issue #92), which .admin-note's amber reads as
+   too mild for. */
+.admin-warning {
+  color: #721c24;
+  background-color: #f8d7da;
+  border-left: 3px solid #dc3545;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
 .admin-list-item--builtin {
   border-left: 3px solid #ffc107;
 }

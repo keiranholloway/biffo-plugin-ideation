@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 
 import { ModelCatalogList } from './ModelCatalogList'
 import type { EffectiveModel, ModelCatalogEntry } from '../lib/api'
@@ -12,6 +12,7 @@ describe('ModelCatalogList', () => {
       label: 'Claude 3 Sonnet',
       active: true,
       is_default: true,
+      web_capable: false,
     },
     {
       id: 'entry-2',
@@ -19,6 +20,7 @@ describe('ModelCatalogList', () => {
       label: 'Claude 3 Opus',
       active: true,
       is_default: false,
+      web_capable: true,
     },
   ]
 
@@ -77,6 +79,30 @@ describe('ModelCatalogList', () => {
 
     const badges = screen.getAllByText('Yes')
     expect(badges.length).toBeGreaterThan(0)
+  })
+
+  it('shows which entries are web-capable (issue #92)', () => {
+    render(
+      <ModelCatalogList
+        entries={mockEntries}
+        effectiveModels={[]}
+        currentDefault="entry-1"
+        {...noopProps()}
+      />,
+    )
+
+    // entry-1 (Sonnet) is not web-capable, entry-2 (Opus) is — both must be
+    // visible so an admin can tell which catalog options will silently
+    // disable a search-dependent agent.
+    const sonnetItem = screen.getByText('Claude 3 Sonnet').closest('.admin-list-item') as HTMLElement
+    const opusItem = screen.getByText('Claude 3 Opus').closest('.admin-list-item') as HTMLElement
+
+    expect(
+      within(sonnetItem).getByText('Web-capable:').nextElementSibling,
+    ).toHaveTextContent('No')
+    expect(
+      within(opusItem).getByText('Web-capable:').nextElementSibling,
+    ).toHaveTextContent('Yes')
   })
 
   it('calls onSetDefault when "Set as Default" button is clicked', () => {

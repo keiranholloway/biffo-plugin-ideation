@@ -109,6 +109,15 @@ export function ModelCatalogList({
                 {entry.is_default ? 'Yes' : 'No'}
               </span>
             </p>
+            <p>
+              {/* Issue #92: the only place an admin can see, at a glance,
+                  which entries a search-dependent agent (e.g. the ideation
+                  analyst) can actually be pointed at. */}
+              <strong>Web-capable:</strong>{' '}
+              <span className={entry.web_capable ? 'badge-active' : 'badge-inactive'}>
+                {entry.web_capable ? 'Yes' : 'No'}
+              </span>
+            </p>
           </div>
           <div className="admin-list-actions">
             {!entry.is_default && (

@@ -146,6 +146,7 @@ export function AgentList({
                       entries={catalogEntries}
                       value={editForm.model ?? ''}
                       onChange={(model) => setEditForm({ ...editForm, model })}
+                      role={editForm.role ?? row.agent.role}
                     />
                   </label>
                   {/*
