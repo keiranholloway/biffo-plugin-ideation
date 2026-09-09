@@ -87,6 +87,7 @@ export function AgentForm({ onSubmit, catalogEntries }: AgentFormProps) {
               value={form.model}
               onChange={(model) => setForm({ ...form, model })}
               required
+              role={form.role}
             />
           </label>
 

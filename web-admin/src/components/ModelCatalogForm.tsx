@@ -11,6 +11,7 @@ export function ModelCatalogForm({ onSubmit }: ModelCatalogFormProps) {
     label: '',
     active: true,
     is_default: false,
+    web_capable: false,
   })
   const [showForm, setShowForm] = useState(false)
 
@@ -22,6 +23,7 @@ export function ModelCatalogForm({ onSubmit }: ModelCatalogFormProps) {
       label: '',
       active: true,
       is_default: false,
+      web_capable: false,
     })
     setShowForm(false)
   }
@@ -75,6 +77,15 @@ export function ModelCatalogForm({ onSubmit }: ModelCatalogFormProps) {
               onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
             />
             Set as Default
+          </label>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={form.web_capable}
+              onChange={(e) => setForm({ ...form, web_capable: e.target.checked })}
+            />
+            Web-capable (model id carries OpenRouter's ':online' suffix)
           </label>
 
           <button type="submit" className="admin-btn-primary">

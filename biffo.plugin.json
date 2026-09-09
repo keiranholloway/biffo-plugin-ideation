@@ -232,6 +232,12 @@
           "type": "Boolean",
           "nullable": true,
           "description": "The default model a new agent is created with. Exactly one row should have this true at a time — enforced by the admin UI, not the database (this table has no custom application code to enforce it server-side)."
+        },
+        {
+          "name": "web_capable",
+          "type": "Boolean",
+          "nullable": true,
+          "description": "Whether this model can search the web (issue #92) — for OpenRouter, whether model_id carries the ':online' suffix. Declared explicitly rather than derived at read time so a future provider with a different mechanism still fits. Nullable because the generated migration DDL does not apply declared defaults — treat NULL as false; every create request must set it explicitly. ModelSelect filters to these entries for an agent whose role requires search, and flags a stored selection that is not web-capable rather than silently rewriting it."
         }
       ],
       "indexes": [
