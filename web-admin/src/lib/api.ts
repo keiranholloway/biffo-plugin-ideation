@@ -42,6 +42,11 @@ export interface ModelCatalogEntry {
   label: string
   active: boolean
   is_default: boolean
+  /** Can this model search the web (issue #92) — for OpenRouter, does
+   * model_id carry the ':online' suffix. Declared explicitly per row rather
+   * than parsed from the id here, so a future provider with a different
+   * mechanism still fits. */
+  web_capable: boolean
 }
 
 // ── effective configuration ─────────────────────────────────────────────────

@@ -71,7 +71,7 @@ export default function App() {
   useEffect(() => {
     void getCurrentSession().then((s) => {
       if (!s) {
-        window.location.href = `/login?return_to=${encodeURIComponent('/ideation/')}`
+        window.location.href = `/login?return_to=${encodeURIComponent('/api/v1/plugins/ideation/ui/')}`
         return
       }
       if (!isFounder(s)) {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 
-import { ModelSelect, choosableModels } from './ModelSelect'
+import { ModelSelect, choosableModels, roleRequiresWebSearch } from './ModelSelect'
 import type { ModelCatalogEntry } from '../lib/api'
 
 /**
@@ -12,10 +12,52 @@ import type { ModelCatalogEntry } from '../lib/api'
  */
 describe('ModelSelect', () => {
   const entries: ModelCatalogEntry[] = [
-    { id: '1', model_id: 'vendor/zebra', label: 'Zebra', active: true, is_default: false },
-    { id: '2', model_id: 'vendor/alpha', label: 'Alpha', active: true, is_default: false },
-    { id: '3', model_id: 'vendor/def', label: 'Default one', active: true, is_default: true },
-    { id: '4', model_id: 'vendor/off', label: 'Retired', active: false, is_default: false },
+    {
+      id: '1',
+      model_id: 'vendor/zebra',
+      label: 'Zebra',
+      active: true,
+      is_default: false,
+      web_capable: false,
+    },
+    {
+      id: '2',
+      model_id: 'vendor/alpha',
+      label: 'Alpha',
+      active: true,
+      is_default: false,
+      web_capable: false,
+    },
+    {
+      id: '3',
+      model_id: 'vendor/def',
+      label: 'Default one',
+      active: true,
+      is_default: true,
+      web_capable: false,
+    },
+    {
+      id: '4',
+      model_id: 'vendor/off',
+      label: 'Retired',
+      active: false,
+      is_default: false,
+      web_capable: false,
+    },
+  ]
+
+  // One web-capable entry, so filtering tests have something real to narrow
+  // down to rather than exercising the "nothing is web-capable" fallback.
+  const entriesWithWebCapable: ModelCatalogEntry[] = [
+    ...entries,
+    {
+      id: '5',
+      model_id: 'vendor/alpha:online',
+      label: 'Alpha (web)',
+      active: true,
+      is_default: false,
+      web_capable: true,
+    },
   ]
 
   describe('choosableModels', () => {
@@ -78,5 +120,84 @@ describe('ModelSelect', () => {
     // Not an empty dropdown that looks like a bug — the free-text fallback
     // with its explanation.
     expect(screen.getByLabelText('Model').tagName).toBe('INPUT')
+  })
+
+  // ── issue #92: web capability ────────────────────────────────────────────
+
+  describe('roleRequiresWebSearch', () => {
+    it('is true only for the analyst role', () => {
+      expect(roleRequiresWebSearch('analyst')).toBe(true)
+    })
+
+    it('is false for the challenger role, other roles, and no role at all', () => {
+      expect(roleRequiresWebSearch('challenger')).toBe(false)
+      expect(roleRequiresWebSearch('reviewer')).toBe(false)
+      expect(roleRequiresWebSearch(undefined)).toBe(false)
+    })
+  })
+
+  describe('choosableModels with requireWebCapable', () => {
+    it('narrows to active, web-capable entries only', () => {
+      expect(
+        choosableModels(entriesWithWebCapable, { requireWebCapable: true }).map((e) => e.model_id),
+      ).toEqual(['vendor/alpha:online'])
+    })
+
+    it('is a no-op when requireWebCapable is not set', () => {
+      expect(choosableModels(entriesWithWebCapable).length).toBe(
+        choosableModels(entriesWithWebCapable, { requireWebCapable: false }).length,
+      )
+    })
+  })
+
+  it('filters to web-capable models for a role that requires search', () => {
+    render(
+      <ModelSelect entries={entriesWithWebCapable} value="" onChange={vi.fn()} role="analyst" />,
+    )
+
+    expect(screen.getByRole('option', { name: /Alpha \(web\)/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^Zebra/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^Alpha \(vendor\/alpha\)/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/only web-capable/)).toBeInTheDocument()
+  })
+
+  it('does not filter for a role that does not require search', () => {
+    render(
+      <ModelSelect entries={entriesWithWebCapable} value="" onChange={vi.fn()} role="challenger" />,
+    )
+
+    expect(screen.getByRole('option', { name: /^Zebra/ })).toBeInTheDocument()
+    expect(screen.queryByText(/only web-capable/)).not.toBeInTheDocument()
+  })
+
+  it('flags a stored selection that is not web-capable rather than silently rewriting it', () => {
+    // Same shape as the existing off-catalog case: the model is real and in
+    // the catalog, it just cannot search — filtering it out of the options
+    // must not filter it out of the *value*.
+    render(
+      <ModelSelect
+        entries={entriesWithWebCapable}
+        value="vendor/alpha"
+        onChange={vi.fn()}
+        role="analyst"
+      />,
+    )
+
+    const field = screen.getByLabelText('Model') as HTMLSelectElement
+    expect(field.value).toBe('vendor/alpha')
+    expect(
+      screen.getByRole('option', { name: /not web-capable, but this role requires search/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('falls back to every active model with a warning when none is web-capable yet', () => {
+    // entries (no ':online' sibling) has zero web-capable rows — filtering to
+    // nothing would strand the admin with an empty picker.
+    render(<ModelSelect entries={entries} value="" onChange={vi.fn()} role="analyst" />)
+
+    const field = screen.getByLabelText('Model')
+    expect(field.tagName).toBe('SELECT')
+    expect(screen.getByRole('option', { name: /^Zebra/ })).toBeInTheDocument()
+    expect(screen.getByText(/no catalog entry is marked web-capable yet/)).toBeInTheDocument()
   })
 })
