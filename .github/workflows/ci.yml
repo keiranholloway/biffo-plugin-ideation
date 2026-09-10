@@ -147,6 +147,25 @@ jobs:
       - name: JS dependency audit
         run: sh scripts/js-dependency-audit.sh
 
+  # scripts/guard-self-test-wiring.sh audits every scripts/*.test.sh guard
+  # this repo holds and confirms each one either has a real caller elsewhere
+  # in .github/workflows/*.yml or gets run directly right here -- see #157.
+  # Without this job all five of this repo's *.test.sh guards
+  # (core-revision-preflight, core-version-preflight,
+  # py-dependency-audit-classification, py-dependency-audit-truncation,
+  # routing-smoke-test) sat in the tree looking like coverage while
+  # contributing none to real CI -- a fail-open the guard script exists
+  # specifically to catch, that was itself unwired the same way. Needs only
+  # the checked-out tree (find/grep/sort/mktemp), no uv/pnpm setup.
+  guard-wiring:
+    name: Guard wiring audit
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard self-test wiring
+        run: sh scripts/guard-self-test-wiring.sh
+
   frontend:
     name: Frontend (lint, types, test, build)
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
