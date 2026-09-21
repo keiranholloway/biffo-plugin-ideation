@@ -61,9 +61,27 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
+      # pnpm before setup-node, matching ci.yml's own security-deps job's order
+      # (actions/setup-node's dependency caching, unused here, still expects
+      # pnpm on PATH first if a cache key were ever added).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # JS dependency audit, folded in here rather than left advisory-only in
+      # ci.yml's `security-deps` job (owner-approved option B,
+      # biffo-plugin-ideation#151). The fleet's token cannot write branch
+      # protection, so a *new* required check cannot be added to `dev` --
+      # `Release Guards` already is one of the three required contexts, so a
+      # real high/critical JS advisory blocking merge only becomes possible by
+      # running the audit inside this job rather than ci.yml's. `ci.yml`'s own
+      # `security-deps` job is deliberately left untouched and stays
+      # advisory-only. No `pnpm install` needed -- `pnpm audit` reads the
+      # committed lockfile directly, same as ci.yml's job.
+      - name: JS dependency audit
+        run: sh scripts/js-dependency-audit.sh
       # Bare node: the script has no dependencies, so this needs no install and
       # cannot be broken by one failing.
       - name: Closing keywords
