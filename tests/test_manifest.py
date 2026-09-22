@@ -210,3 +210,69 @@ def test_declares_no_static_chat_agents_beside_the_dynamic_flag() -> None:
     # latent drift rather than a realised one — but the copy that would have
     # drifted is the one no test could have caught, because nothing executes it.
     assert "chat_agents" not in _manifest()
+
+
+# ---------------------------------------------------------------------------
+# The required-group literal has no second home (issues #163, #171).
+#
+# Three fixes of the same defect landed before anyone consolidated it: the
+# manifest moved to "admin" (#162), app.py's own gate kept "founder" and 403'd
+# every admitted caller (#163/#170), and the chat-agent seed payload kept
+# "founder" at a *different* enforcement point and 403'd them one step later
+# (#171). Each fix corrected a copy. These pin the consolidation instead.
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_required_group_reads_each_surface_from_the_manifest() -> None:
+    from ideation.manifest import manifest_required_group
+
+    manifest = _manifest()
+    for surface in ("user_ingress", "admin_ingress"):
+        assert manifest_required_group(surface) == manifest[surface]["required_group"]
+
+
+def test_manifest_required_group_fails_closed_on_a_surface_that_declares_none() -> None:
+    """A typo'd or group-less surface must raise, not return None — a gate built
+    from None admits or refuses the wrong audience silently, which is the whole
+    failure mode this helper exists to end."""
+    import pytest
+
+    from ideation.manifest import manifest_required_group
+
+    with pytest.raises(KeyError):
+        manifest_required_group("no_such_ingress")
+
+
+def test_no_module_hardcodes_a_group_literal_in_its_gate() -> None:
+    """The guard, not just the fix: every ``require_group(...)`` in the package
+    must take its argument from the manifest helper.
+
+    A literal here is exactly what #163 and #171 were — a hand-maintained copy
+    of a manifest field, correct on the day it was written and silently wrong
+    the day the manifest moved. ``admin_app.py``'s ``require_group("admin")``
+    was the copy still standing when #171 was fixed; it agreed with the manifest
+    at the time, which is precisely how the previous two survived review.
+    """
+    import ast
+    from pathlib import Path
+
+    package = Path(__file__).resolve().parent.parent / "src" / "ideation"
+    offenders: list[str] = []
+
+    for path in sorted(package.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if name != "require_group":
+                continue
+            for arg in node.args:
+                if isinstance(arg, ast.Constant):
+                    offenders.append(f"{path.name}:{node.lineno} require_group({arg.value!r})")
+
+    assert offenders == [], (
+        "these gates hardcode a group instead of calling "
+        f"manifest_required_group(<surface>): {offenders}"
+    )

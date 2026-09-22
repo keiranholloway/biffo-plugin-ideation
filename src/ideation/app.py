@@ -17,7 +17,6 @@ Mangum handler.
 
 from __future__ import annotations
 
-import json
 import logging
 
 from biffo_plugin_sdk import ForwardedUser, require_group
@@ -29,7 +28,7 @@ from pydantic import BaseModel, Field
 from .adapter import CoreHttpError, CoreHttpGateway
 from .definitions import MAX_TURNS, MIN_TURNS
 from .effective_config import builtin_chat_agents
-from .manifest import MANIFEST_PATH
+from .manifest import manifest_required_group
 from .models import ANALYSING, GATHERING
 from .service import (
     AgentConfigMissingError,
@@ -47,21 +46,15 @@ from .transport import CoreTransport
 _LOGGER = logging.getLogger(__name__)
 
 
-def _manifest_required_group() -> str:
-    """The group ``user_ingress.required_group`` declares in ``biffo.plugin.json``
-    — the same field the shared plugin host's own group gate reads before ever
-    dispatching here. Read at import time instead of hardcoding a second literal
-    copy, so this in-app re-check cannot drift from the manifest the way it did in
-    issue #163 (manifest flipped ``"founder"`` -> ``"admin"``; this file kept its
-    own hardcoded ``"founder"`` and 403'd the exact caller the manifest change was
-    meant to admit)."""
-    manifest = json.loads(MANIFEST_PATH.read_text())
-    return manifest["user_ingress"]["required_group"]
-
-
 #: The gate — verifies the shared-Cognito JWT and requires the manifest's group.
 #: The verified user carries its raw token, forwarded to Core by the transport.
-require_founder = require_group(_manifest_required_group())
+#:
+#: The group is read from the manifest at import time (``manifest.py``'s one
+#: helper) rather than hardcoded here, so this in-app re-check cannot drift from
+#: it the way it did in issue #163 — the manifest flipped ``"founder"`` ->
+#: ``"admin"``, this file kept its own copy of the old literal, and 403'd the
+#: exact caller the manifest change was meant to admit.
+require_founder = require_group(manifest_required_group("user_ingress"))
 
 
 def get_service(founder: ForwardedUser = Depends(require_founder)) -> IdeationService:

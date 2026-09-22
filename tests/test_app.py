@@ -7,6 +7,7 @@ are covered elsewhere (the SDK; the transport's own test).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Iterator
 from dataclasses import replace
@@ -17,8 +18,10 @@ from biffo_plugin_sdk import ForwardedUser
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ideation.adapter import CoreHttpError
 from ideation.app import _derive_title, app, get_service, require_founder
-from ideation.definitions import ANALYST_INSTRUCTIONS
+from ideation.definitions import ANALYST_INSTRUCTIONS, CHALLENGER_AGENT_NAME
+from ideation.effective_config import builtin_chat_agents
 from ideation.manifest import MANIFEST_PATH
 from ideation.models import GATHERING, Run, Session, TurnResult
 from ideation.service import IdeationService
@@ -613,3 +616,147 @@ def test_read_report_title_matches_list_sessions_title_anti_drift(client, core):
 
     # The titles must be exactly equal
     assert report_title == list_title
+
+
+# ---------------------------------------------------------------------------
+# Issue #171 — the *other* enforcement point: Core's per-agent gate.
+#
+# #163/#170 fixed the per-surface gates (the plugin host's manifest `group_gate`
+# and this app's own `require_founder`). Getting past both only buys a session.
+# Every chat *turn* is separately authorised by Core, in
+# `services/api/src/api/routers/internal_agent_chat.py`:
+#
+#     if agent.required_group not in founder.roles:
+#         raise HTTPException(403, f"Access to this assistant requires the "
+#                                  f"'{agent.required_group}' group.")
+#
+# `agent` there is the **stored chat-agent row** — the row this plugin seeds from
+# `effective_config.builtin_chat_agents()` on every cold start, insert-if-absent
+# and never overwritten. So the group named in that seed payload decides every
+# chat turn for the life of the tenant, and a stale literal there 403s an
+# admin-not-founder on their first real message even though every gate in this
+# repo admitted them.
+# ---------------------------------------------------------------------------
+
+
+class _CoreWithPerAgentGate(FakeCore):
+    """`FakeCore` plus Core's own per-agent authorisation gate, enforced against
+    rows seeded from `builtin_chat_agents()`.
+
+    Deliberately not a mock of the answer: the row is inserted by the same
+    payload builder the real startup seeding posts, and the check is the same
+    membership test `internal_agent_chat.py` runs. So the assertion is about the
+    seed payload, not about a fixture someone hand-wrote to match it.
+    """
+
+    def __init__(self, *, caller_groups: list[str]) -> None:
+        super().__init__()
+        self.caller_groups = caller_groups
+        self.agent_rows: dict[str, dict[str, Any]] = {}
+        self.refusals: list[str] = []
+
+    def seed(self, rows: list[dict[str, Any]]) -> None:
+        """Core's seed route: insert-if-absent, never overwrite."""
+        for row in rows:
+            self.agent_rows.setdefault(row["agent_key"], dict(row))
+
+    async def run_chat_turn(self, *, thread_id, owner_sub, agent_name, user_text) -> TurnResult:
+        agent = self.agent_rows[agent_name]
+        if agent["required_group"] not in self.caller_groups:
+            detail = f"Access to this assistant requires the '{agent['required_group']}' group."
+            self.refusals.append(detail)
+            raise CoreHttpError(f"POST /internal/agent-chat/{agent_name} -> 403: {detail}")
+        return await super().run_chat_turn(
+            thread_id=thread_id, owner_sub=owner_sub, agent_name=agent_name, user_text=user_text
+        )
+
+
+def _gated_core_with_session(*, caller_groups: list[str], sub: str) -> _CoreWithPerAgentGate:
+    core = _CoreWithPerAgentGate(caller_groups=caller_groups)
+    core.seed(builtin_chat_agents())
+    asyncio.run(
+        core.create_session(
+            owner_sub=sub,
+            seed_idea="an app for coaches",
+            thread_id="t1",
+            challenger_agent_key=CHALLENGER_AGENT_NAME,
+        )
+    )
+    return core
+
+
+def test_admin_not_founder_can_take_an_actual_chat_turn_end_to_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for #171 — the symptom #70 was filed to remove, at the gate
+    #170 did not reach.
+
+    An admin-who-is-not-founder passes the host's group gate and this app's own
+    `require_founder` (both manifest-driven since #170) and can create a
+    session — #170's own new test proves exactly that much. This goes one step
+    further, to the thing the product actually is: sending a message. That call
+    reaches Core's per-agent gate, which reads the seeded row's
+    `required_group`, and while `builtin_chat_agents()` seeded `"founder"` this
+    request 403'd on the first real turn.
+
+    The admitted group is read off the manifest rather than named, so this stays
+    a cross-check between what the manifest declares and what the seed payload
+    demands even if the required group changes again.
+    """
+    manifest_group = json.loads(MANIFEST_PATH.read_text())["user_ingress"]["required_group"]
+    core = _gated_core_with_session(caller_groups=[manifest_group], sub="admin-user")
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_service] = lambda: IdeationService(core)
+    _install_fake_cognito(monkeypatch, groups=[manifest_group], sub="admin-user")
+
+    resp = TestClient(app, raise_server_exceptions=False).post(
+        "/sessions/s1/messages",
+        json={"message": "here is my answer"},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert core.refusals == [], core.refusals
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["reply"] == "challenge 1"
+    assert resp.json()["turn_count"] == 1
+    app.dependency_overrides.clear()
+
+
+def test_a_chat_turn_is_refused_when_the_seeded_row_names_a_group_the_caller_lacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mirror case, against the same gate — without it the test above is
+    vacuous, because a fake that never refuses anything passes it too.
+
+    This seeds the pre-#171 row (`required_group: "founder"`) explicitly and
+    sends the identical request: it must be refused, and the refusal must name
+    the group the row demanded. That is the 403 an admin-not-founder was getting
+    in production, reproduced here, and it is what the test above now proves the
+    seed payload no longer asks for.
+    """
+    manifest_group = json.loads(MANIFEST_PATH.read_text())["user_ingress"]["required_group"]
+    core = _CoreWithPerAgentGate(caller_groups=[manifest_group])
+    core.seed([{**a, "required_group": "founder"} for a in builtin_chat_agents()])
+    asyncio.run(
+        core.create_session(
+            owner_sub="admin-user",
+            seed_idea="an app for coaches",
+            thread_id="t1",
+            challenger_agent_key=CHALLENGER_AGENT_NAME,
+        )
+    )
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_service] = lambda: IdeationService(core)
+    _install_fake_cognito(monkeypatch, groups=[manifest_group], sub="admin-user")
+
+    resp = TestClient(app, raise_server_exceptions=False).post(
+        "/sessions/s1/messages",
+        json={"message": "here is my answer"},
+        headers={"Authorization": "Bearer admin-token"},
+    )
+
+    assert resp.status_code != 200
+    assert core.refusals == ["Access to this assistant requires the 'founder' group."]
+    app.dependency_overrides.clear()

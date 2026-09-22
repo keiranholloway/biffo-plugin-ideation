@@ -39,6 +39,7 @@ from ideation.effective_config import (
     chat_model,
     effective_models,
 )
+from ideation.manifest import manifest_required_group
 from ideation.service import IdeationService
 
 
@@ -50,7 +51,10 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "role": "challenger",
         "system_prompt": "stored prompt",
         "model": "vendor/stored-chat",
-        "required_group": "founder",
+        # What a real stored row carries: seeded from the manifest's group
+        # (issue #171), not the old "founder" literal this fixture used to
+        # illustrate as normal.
+        "required_group": "admin",
         "active": True,
         **overrides,
     }
@@ -68,6 +72,29 @@ class TestBuiltinAgents:
 
         assert [a["agent_key"] for a in agents] == [CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME]
         assert [a["role"] for a in agents] == ["challenger", "analyst"]
+
+    def test_the_seeded_required_group_is_derived_from_the_manifest(self) -> None:
+        """Issue #171 — the authorisation half of this payload.
+
+        ``required_group`` is not display data: Core stores it on the chat-agent
+        row and re-checks it on *every* chat turn, and the seed is
+        insert-if-absent, so the first value written is permanent for that
+        tenant. It hardcoded ``"founder"`` here while the manifest (and, after
+        #170, both gates in this repo) had moved to ``"admin"`` — so an
+        admin-not-founder got through every gate and then 403'd on their first
+        real message.
+
+        Asserted both ways round: equal to the manifest (so it can never drift
+        again) and equal to the concrete group the owner decided on (so the two
+        cannot quietly drift together and still pass).
+        """
+        challenger, analyst = builtin_chat_agents()
+        manifest_group = manifest_required_group("user_ingress")
+
+        assert manifest_group == "admin"  # owner decision B, biffo-platform-app#70
+        assert challenger["required_group"] == manifest_group
+        assert analyst["required_group"] == manifest_group
+        assert "founder" not in (challenger["required_group"], analyst["required_group"])
 
     def test_the_reported_prompts_are_the_prompts_actually_executed(self) -> None:
         """Not a paraphrase of the defaults — the same constants ``service.py``

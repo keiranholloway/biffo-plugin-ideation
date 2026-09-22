@@ -50,9 +50,10 @@ from fastapi.staticfiles import StaticFiles
 
 from .adapter import CoreHttpError, CoreHttpGateway
 from .effective_config import builtin_chat_agents, effective_models
+from .manifest import manifest_required_group
 from .transport import CoreTransport
 
-require_admin = require_group("admin")
+require_admin = require_group(manifest_required_group("admin_ingress"))
 
 _LOGGER = logging.getLogger(__name__)
 
