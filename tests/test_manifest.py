@@ -176,20 +176,22 @@ def test_the_core_floor_covers_declared_route_forwarding() -> None:
     )
 
 
-def test_declares_a_founder_gated_user_ingress_pointing_at_the_asgi_app() -> None:
+def test_declares_an_admin_gated_user_ingress_pointing_at_the_asgi_app() -> None:
     # ADR-0021: the shared plugin host mounts this app. user_ingress references the
-    # ASGI app as "<module>:<attr>", gated to the founder group. No handler/path —
-    # the host owns the Lambda entrypoint and the mount prefix.
+    # ASGI app as "<module>:<attr>", gated to the admin group (owner decision B on
+    # biffo-platform-app#70 — "founder" is a biffo-platform-only concept; other
+    # platforms use admin only). No handler/path — the host owns the Lambda
+    # entrypoint and the mount prefix.
     ingress = _manifest()["user_ingress"]
-    assert ingress["required_group"] == "founder"
+    assert ingress["required_group"] == "admin"
     assert ingress["app"] == "ideation.app:app"
     assert "handler" not in ingress
     assert "path" not in ingress
 
 
-def test_declares_a_founder_gated_user_frontend() -> None:
+def test_declares_an_admin_gated_user_frontend() -> None:
     frontend = _manifest()["user_frontend"]
-    assert frontend["required_group"] == "founder"
+    assert frontend["required_group"] == "admin"
     assert frontend["dir"]  # the built static export directory
 
 
