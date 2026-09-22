@@ -56,6 +56,7 @@ from .definitions import (
     CHALLENGER_AGENT_NAME,
     CHALLENGER_INSTRUCTIONS,
 )
+from .manifest import manifest_required_group
 
 #: Role names as the stored chat-agent rows spell them.
 CHALLENGER_ROLE = "challenger"
@@ -132,7 +133,25 @@ def builtin_chat_agents() -> list[dict[str, Any]]:
     either role fails (the challenger's chat turn 404s server-side; the
     analyst's ``finalise()`` raises ``AgentConfigMissingError``) rather than
     running on what this function returns.
+
+    ``required_group`` is **authorisation**, not decoration: it is what Core
+    stores on the row and checks on every chat turn, and because seeding never
+    overwrites, whatever this function emits the first time is what that tenant
+    is stuck with. It is therefore derived from the manifest
+    (``manifest.manifest_required_group``) rather than written out here — see
+    issue #171, where the hardcoded ``"founder"`` in this payload 403'd
+    admin-not-founder callers on their first real message long after every gate
+    in this repo had been fixed to admit them.
     """
+    # Read from the manifest, never hardcoded (issue #171). Core's chat-turn
+    # spine authorises *every turn* against this stored value
+    # (``internal_agent_chat.py``: ``if agent.required_group not in
+    # founder.roles: 403``), and the seed is insert-if-absent — the row is never
+    # overwritten once written, so a stale literal here is permanent for that
+    # tenant. The only callers of these agents arrive through
+    # ``user_ingress``, so that surface's group is the one that must match:
+    # anything else 403s the exact audience the manifest admits.
+    required_group = manifest_required_group("user_ingress")
     return [
         {
             "agent_key": CHALLENGER_AGENT_NAME,
@@ -140,7 +159,7 @@ def builtin_chat_agents() -> list[dict[str, Any]]:
             "role": "challenger",
             "system_prompt": CHALLENGER_INSTRUCTIONS,
             "model": chat_model(),
-            "required_group": "founder",
+            "required_group": required_group,
             "active": True,
         },
         {
@@ -149,7 +168,7 @@ def builtin_chat_agents() -> list[dict[str, Any]]:
             "role": "analyst",
             "system_prompt": ANALYST_INSTRUCTIONS,
             "model": analysis_model(),
-            "required_group": "founder",
+            "required_group": required_group,
             "active": True,
         },
     ]
