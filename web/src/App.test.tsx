@@ -17,12 +17,13 @@ function mockFetch(status: number, body: unknown) {
 }
 
 // A real Cognito ID token carries group membership in `cognito:groups`; the
-// default here is a founder, because that is what every other test in this file
-// is about. Pass explicit groups to exercise the gate itself.
+// default here is an admin, because `user_ingress.required_group` is "admin"
+// (owner decision B on biffo-platform-app#70) and that is what every other test
+// in this file is about. Pass explicit groups to exercise the gate itself.
 // `jwt` is fixed per session object on purpose: the real `CognitoUserSession` is
 // an immutable snapshot, so a JWT read off one never changes no matter how long
 // the page has been open (see lib/auth.ts).
-function createMockSession(groups: unknown = ['founder'], jwt = 'test-token') {
+function createMockSession(groups: unknown = ['admin'], jwt = 'test-token') {
   const idToken = { getJwtToken: () => jwt, payload: { 'cognito:groups': groups } }
   return { getIdToken: () => idToken } as unknown as CognitoUserSession
 }
@@ -882,14 +883,14 @@ describe('App', () => {
 // do the bounce that `user_frontend.required_group` declares (ADR-0018 §2).
 // This is UX only — the server enforces the same group at API Gateway, at the
 // shared plugin host's group_gate, and again in the plugin's own
-// require_group("founder").
-describe('App founder-group gate (direct navigation to /api/v1/plugins/ideation/ui/)', () => {
+// require_founder (src/ideation/app.py).
+describe('App admin-group gate (direct navigation to /api/v1/plugins/ideation/ui/)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/')
   })
 
-  it('refuses to render the engine for a signed-in user with no founder group', async () => {
+  it('refuses to render the engine for a signed-in user with no admin group', async () => {
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession([]))
     const fetchSpy = mockFetch(200, [])
 
@@ -903,10 +904,15 @@ describe('App founder-group gate (direct navigation to /api/v1/plugins/ideation/
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('refuses a user in some other group (the group is matched exactly)', async () => {
-    // `user_ingress.required_group` is literally "founder". Admitting an admin
-    // here would just move the server's 403 from the front door to every button.
-    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['admin', 'staff']))
+  it('refuses a founder who is not also an admin (the group is matched exactly)', async () => {
+    // Regression for #163: `user_ingress.required_group` is "admin" (owner
+    // decision B on biffo-platform-app#70 — "founder" is a
+    // biffo-platform-only concept; other platforms use admin only), not
+    // "founder or admin". A founder-only caller must still be bounced here —
+    // before this fix this exact case rendered (roles.ts hardcoded
+    // `REQUIRED_GROUP = 'founder'` after the manifest had already moved to
+    // "admin").
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['founder', 'staff']))
     mockFetch(200, [])
 
     render(<App />)
@@ -926,8 +932,11 @@ describe('App founder-group gate (direct navigation to /api/v1/plugins/ideation/
     expect(await screen.findByText(/available to members of the/i)).toBeInTheDocument()
   })
 
-  it('still renders the engine for a founder', async () => {
-    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['founder']))
+  it('renders the engine for an admin who is not a founder', async () => {
+    // The exact symptom #70/#163 were filed to fix: an admin-who-is-not-founder
+    // must be admitted end-to-end, not just pass the manifest fixture. Groups
+    // deliberately excludes "founder".
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['admin']))
     mockFetch(200, [])
 
     render(<App />)
@@ -1179,7 +1188,7 @@ describe('session list freshness', () => {
     // is whatever was cached when the page loaded — possibly seconds from
     // expiry — and it never changes again, so nothing may send it.
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(
-      createMockSession(['founder'], 'snapshot-jwt'),
+      createMockSession(['admin'], 'snapshot-jwt'),
     )
     vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('refreshed-jwt')
     const f = mockFetch(200, [])

@@ -7,6 +7,7 @@ are covered elsewhere (the SDK; the transport's own test).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 from typing import Any
@@ -18,6 +19,7 @@ from fastapi.testclient import TestClient
 
 from ideation.app import _derive_title, app, get_service, require_founder
 from ideation.definitions import ANALYST_INSTRUCTIONS
+from ideation.manifest import MANIFEST_PATH
 from ideation.models import GATHERING, Run, Session, TurnResult
 from ideation.service import IdeationService
 
@@ -293,6 +295,87 @@ def test_the_app_is_gated_without_a_token(core):
     monkeypatched = TestClient(app, raise_server_exceptions=False)
     resp = monkeypatched.post("/sessions", json={"seed_idea": "x"})
     assert resp.status_code == 401
+
+
+def _install_fake_cognito(
+    monkeypatch: pytest.MonkeyPatch, *, groups: list[str], sub: str = "u1"
+) -> None:
+    """Point the *real* Cognito verifier `require_founder` calls at a fake, so a
+    full HTTP request can exercise the gate for real without a network JWKS
+    fetch or a signed JWT. Only the outbound signature-verification step is
+    stubbed (``biffo_plugin_sdk._cognito.verify_cognito_jwt``) — the
+    group-membership decision that actually allows/denies
+    (``authorize()`` in ``biffo_plugin_sdk.user_serving``, called by the real
+    ``require_founder`` dependency app.py builds at import time) is the real,
+    unmodified code path.
+    """
+    monkeypatch.setenv("BIFFO_COGNITO_USER_POOL_ID", "pool-x")
+    monkeypatch.setenv("BIFFO_COGNITO_REGION", "eu-west-1")
+    monkeypatch.setenv("BIFFO_COGNITO_CLIENT_ID", "client-y")
+
+    import biffo_plugin_sdk._cognito as cognito
+
+    def fake_verify(token: str, **_: object) -> dict[str, object]:
+        assert token  # the gate already rejects an empty token before calling this
+        return {"sub": sub, "cognito:groups": groups}
+
+    monkeypatch.setattr(cognito, "verify_cognito_jwt", fake_verify)
+
+
+def test_admin_not_founder_is_admitted_by_the_apps_own_gate_end_to_end(
+    core: FakeCore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for #163.
+
+    PR #162 flipped the manifest's ``user_ingress.required_group`` from
+    ``"founder"`` to ``"admin"`` (owner decision B on
+    biffo-platform-app#70), but ``app.py`` kept its own, independent in-app
+    re-check hardcoded to ``require_group("founder")`` — a second,
+    hand-maintained copy of the same literal that PR #162 never touched. An
+    admin-who-is-not-founder then passed the shared plugin host's
+    manifest-driven ``group_gate`` and hit a 403 on every single route here
+    anyway: the exact symptom #70 was filed to fix, still live end-to-end.
+
+    This exercises the app's real, unmocked ``require_founder`` dependency
+    (no dependency override — see ``_install_fake_cognito``) over a real HTTP
+    request through the app's own route, not just the manifest fixture
+    (``test_manifest.py``) and not a mocked-out ``require_founder`` override
+    the way every other test in this file uses. The admitted group is read
+    off the manifest itself, so this stays the actual cross-check between
+    "what the manifest declares" and "what the app's gate accepts" even if
+    the required group changes again.
+    """
+    manifest_group = json.loads(MANIFEST_PATH.read_text())["user_ingress"]["required_group"]
+    assert manifest_group == "admin"  # the premise this test exists to guard
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_service] = lambda: IdeationService(core)
+    _install_fake_cognito(monkeypatch, groups=[manifest_group], sub="admin-user")
+
+    resp = TestClient(app).get("/sessions", headers={"Authorization": "Bearer admin-token"})
+
+    assert resp.status_code == 200, resp.text
+    app.dependency_overrides.clear()
+
+
+def test_founder_without_admin_is_still_rejected_by_the_apps_own_gate_end_to_end(
+    core: FakeCore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The flip side of the regression above, against the same real gate: the
+    manifest requires exactly ``"admin"``, not ``"admin" or "founder"``. A
+    founder-only caller (the old, no-longer-sufficient group) must still be
+    refused — proving the fix changed *which* group is required rather than
+    just widening the check to admit everyone.
+    """
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_service] = lambda: IdeationService(core)
+    _install_fake_cognito(monkeypatch, groups=["founder"], sub="founder-user")
+
+    resp = TestClient(app).get("/sessions", headers={"Authorization": "Bearer founder-token"})
+
+    assert resp.status_code == 403, resp.text
+    assert "admin" in resp.json()["detail"]
+    app.dependency_overrides.clear()
 
 
 def test_exposes_an_asgi_app_not_a_lambda_handler() -> None:
