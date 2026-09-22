@@ -21,12 +21,12 @@
     "idea-submission-read": "^1"
   },
   "user_ingress": {
-    "required_group": "founder",
+    "required_group": "admin",
     "app": "ideation.app:app"
   },
   "user_frontend": {
     "dir": "web/dist",
-    "required_group": "founder"
+    "required_group": "admin"
   },
   "admin_ingress": {
     "required_group": "admin",
