@@ -1,8 +1,10 @@
 // Calls this module's API only (never Core directly — ADR-0002), served by the
 // shared plugin host at <base>/api/v1/plugins/ideation/* on the API Gateway
-// (ADR-0021). The founder's Cognito id token is sent in the X-Biffo-Founder-Token
-// header; the host's group gate verifies it (founder group) and the app re-checks
-// it (require_group("founder")) before doing anything.
+// (ADR-0021). The caller's Cognito id token is sent in the X-Biffo-Founder-Token
+// header; the host's group gate verifies it against user_ingress.required_group
+// (currently "admin" — owner decision B on biffo-platform-app#70) and the app
+// re-checks the same group (require_founder, src/ideation/app.py) before doing
+// anything.
 
 const API_BASE = '/api/v1/plugins/ideation'
 
@@ -95,11 +97,11 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
       method,
       headers: {
         'Content-Type': 'application/json',
-        // The founder id token rides Authorization: Bearer (ADR-0021), exactly as
+        // The id token rides Authorization: Bearer (ADR-0021), exactly as
         // the portal calls Core. The API Gateway's Cognito authorizer validates it
         // (audience = the app client id, i.e. the id token), the shared plugin
-        // host's group gate reads it to enforce the founder group, and this app's
-        // require_group("founder") re-verifies it and forwards it to Core.
+        // host's group gate reads it to enforce user_ingress.required_group, and
+        // this app's require_founder re-verifies it and forwards it to Core.
         ...(token != null ? { Authorization: `Bearer ${token}` } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

@@ -10,24 +10,32 @@ import type { CognitoUserSession } from 'amazon-cognito-identity-js'
 //   1. API Gateway rejects an unauthenticated call to /api/v1/plugins/* (401);
 //   2. the shared plugin host's `group_gate` verifies the Cognito JWT against
 //      the pool's JWKS and requires `user_ingress.required_group` (403);
-//   3. this plugin's own app re-runs `require_group("founder")` per route, and
-//      Core owner-scopes every read/write off the forwarded token.
+//   3. this plugin's own app re-runs the same group check per route
+//      (`src/ideation/app.py`'s `require_founder`), and Core owner-scopes every
+//      read/write off the forwarded token.
 //
 // What this file buys is the bounce ADR-0018 §2 says `required_group` provides:
-// without it a signed-in non-founder who navigates straight to
-// /api/v1/plugins/ideation/ui/ gets
+// without it a signed-in caller who is not in the required group and navigates
+// straight to /api/v1/plugins/ideation/ui/ gets
 // the entire chat UI rendered and only discovers they are not allowed when each
-// individual request comes back "403: This surface requires the 'founder'
+// individual request comes back "403: This surface requires the '<group>'
 // group." (keiranholloway/biffo-platform-app#4).
 //
 // GROUP MUST MATCH THE MANIFEST. `biffo.plugin.json` declares
-// `user_ingress.required_group: "founder"` — literally that group, not "founder
-// or admin". Admitting more here than the server admits just moves the 403 from
-// the front door to every button.
+// `user_ingress.required_group: "admin"` (owner decision B on
+// biffo-platform-app#70 — "founder" is a biffo-platform-only concept; other
+// platforms use admin only) — literally that group, not "admin or founder".
+// Admitting more here than the server admits just moves the 403 from the front
+// door to every button. This constant drifted from the manifest once already
+// (issue #163): it stayed `'founder'` after the manifest moved to `'admin'`,
+// so an admin-not-founder still got bounced by this file before ever reaching
+// the server. Nothing makes this constant automatically track the manifest —
+// changing the manifest's `required_group` again means updating this literal
+// too.
 // ---------------------------------------------------------------------------
 
 /** The group `biffo.plugin.json` declares for this surface. */
-export const REQUIRED_GROUP = 'founder'
+export const REQUIRED_GROUP = 'admin'
 
 const GROUPS_CLAIM = 'cognito:groups'
 

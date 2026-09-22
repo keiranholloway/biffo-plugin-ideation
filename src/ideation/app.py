@@ -1,11 +1,12 @@
-"""The Ideation Engine's founder-facing ASGI app (ADR-0021).
+"""The Ideation Engine's user-facing ASGI app (ADR-0021).
 
 A FastAPI app mounted by the shared plugin host at ``/api/v1/plugins/ideation/*``.
-The host authenticates the founder (its group gate verifies the shared-Cognito JWT
-and requires the ``founder`` group) before dispatching here; this app *also* runs
-``require_group("founder")`` per route — defence-in-depth, and the way it obtains
-the founder's token to forward to Core over the HTTP ``CoreGateway`` so Core owns
-identity and owner-scoping (ADR-0017 §3/§5). It holds **no data** (ADR-0002).
+The host authenticates the caller (its group gate verifies the shared-Cognito JWT
+and requires the manifest's ``user_ingress.required_group``) before dispatching
+here; this app *also* re-runs the same check per route via ``require_founder`` —
+defence-in-depth, and the way it obtains the caller's token to forward to Core
+over the HTTP ``CoreGateway`` so Core owns identity and owner-scoping
+(ADR-0017 §3/§5). It holds **no data** (ADR-0002).
 
 ``app`` (the module-level FastAPI object) is what the manifest's ``user_ingress``
 declares as ``ideation.app:app``; the host provides the Lambda entrypoint and
@@ -16,6 +17,7 @@ Mangum handler.
 
 from __future__ import annotations
 
+import json
 import logging
 
 from biffo_plugin_sdk import ForwardedUser, require_group
@@ -27,6 +29,7 @@ from pydantic import BaseModel, Field
 from .adapter import CoreHttpError, CoreHttpGateway
 from .definitions import MAX_TURNS, MIN_TURNS
 from .effective_config import builtin_chat_agents
+from .manifest import MANIFEST_PATH
 from .models import ANALYSING, GATHERING
 from .service import (
     AgentConfigMissingError,
@@ -43,9 +46,22 @@ from .transport import CoreTransport
 
 _LOGGER = logging.getLogger(__name__)
 
-#: The founder gate — verifies the shared-Cognito JWT and requires the group. The
-#: verified user carries its raw token, forwarded to Core by the transport.
-require_founder = require_group("founder")
+
+def _manifest_required_group() -> str:
+    """The group ``user_ingress.required_group`` declares in ``biffo.plugin.json``
+    — the same field the shared plugin host's own group gate reads before ever
+    dispatching here. Read at import time instead of hardcoding a second literal
+    copy, so this in-app re-check cannot drift from the manifest the way it did in
+    issue #163 (manifest flipped ``"founder"`` -> ``"admin"``; this file kept its
+    own hardcoded ``"founder"`` and 403'd the exact caller the manifest change was
+    meant to admit)."""
+    manifest = json.loads(MANIFEST_PATH.read_text())
+    return manifest["user_ingress"]["required_group"]
+
+
+#: The gate — verifies the shared-Cognito JWT and requires the manifest's group.
+#: The verified user carries its raw token, forwarded to Core by the transport.
+require_founder = require_group(_manifest_required_group())
 
 
 def get_service(founder: ForwardedUser = Depends(require_founder)) -> IdeationService:

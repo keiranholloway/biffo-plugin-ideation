@@ -32,24 +32,32 @@ describe('getUserGroups', () => {
 
 describe('isFounder', () => {
   it('matches the group the manifest declares', () => {
-    expect(REQUIRED_GROUP).toBe('founder')
+    // Regression for #163: this drifted from the manifest once already — the
+    // manifest's user_ingress.required_group moved to "admin" (owner decision B
+    // on biffo-platform-app#70) while this constant stayed "founder".
+    expect(REQUIRED_GROUP).toBe('admin')
   })
 
-  it('admits a founder', () => {
-    expect(isFounder(sessionWithGroups(['founder']))).toBe(true)
+  it('admits an admin who is not also a founder', () => {
+    // The exact symptom #70/#163 were filed to fix: groups deliberately
+    // excludes "founder".
+    expect(isFounder(sessionWithGroups(['admin']))).toBe(true)
   })
 
   it('refuses a user in no group', () => {
     expect(isFounder(sessionWithGroups([]))).toBe(false)
   })
 
-  it('refuses an admin who is not also a founder', () => {
-    // user_ingress.required_group is exactly "founder" — the server would 403
-    // an admin-only token, so the client must not pretend otherwise.
-    expect(isFounder(sessionWithGroups(['admin']))).toBe(false)
+  it('refuses a founder who is not also an admin', () => {
+    // user_ingress.required_group is exactly "admin" — the server would 403 a
+    // founder-only token, so the client must not pretend otherwise. This is
+    // the case that stayed broken after #162: the manifest already said
+    // "admin", but this constant still hardcoded "founder", so a founder-only
+    // token kept being admitted here while every real request 403'd.
+    expect(isFounder(sessionWithGroups(['founder']))).toBe(false)
   })
 
   it('refuses a look-alike group name', () => {
-    expect(isFounder(sessionWithGroups(['founders', 'co-founder']))).toBe(false)
+    expect(isFounder(sessionWithGroups(['admins', 'super-admin']))).toBe(false)
   })
 })
