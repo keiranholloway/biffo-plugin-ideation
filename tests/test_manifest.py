@@ -243,6 +243,86 @@ def test_manifest_required_group_fails_closed_on_a_surface_that_declares_none() 
         manifest_required_group("no_such_ingress")
 
 
+# ---------------------------------------------------------------------------
+# Path resolution under the shared plugin host's deploy layout (issue #173).
+#
+# The old ``_resolve_manifest_path()`` walked up from this module looking for
+# ``biffo.plugin.json`` alongside its own source — correct in this repo
+# checkout, but the shared host's deploy-app.yml copies this plugin's ``src/``
+# straight to the Lambda task root while placing the manifest at
+# ``services/ideation/biffo.plugin.json``, a *sibling* of the flattened
+# ``src/``, not an ancestor of it. No walk-up from the module reaches that.
+# Because ``app.py`` reads the manifest at *import* time
+# (``manifest_required_group("user_ingress")`` at module scope), a resolution
+# miss didn't just fail one request — it crashed the whole Lambda at cold
+# start. Confirmed live on biffo-platform's dev environment 2026-09-23.
+# ---------------------------------------------------------------------------
+
+
+def test_resolves_under_the_deployed_layout_when_plugins_root_is_set(tmp_path) -> None:
+    """The fix: BIFFO_PLUGINS_ROOT (already set on the Lambda for
+    discover_plugins()'s own manifest scan, per admin_app.py's
+    _resolve_static_dir) anchors the manifest at
+    services/ideation/biffo.plugin.json directly, independent of __file__'s
+    location -- so the flattened-src deploy layout resolves correctly."""
+    from ideation.manifest import _resolve_manifest_path
+
+    services_root = tmp_path / "var" / "task" / "services"
+    manifest_file = services_root / "ideation" / "biffo.plugin.json"
+    manifest_file.parent.mkdir(parents=True)
+    manifest_file.write_text("{}")
+
+    result = _resolve_manifest_path(str(services_root))
+
+    assert result == manifest_file
+    assert result.is_file()
+
+
+def test_falls_back_to_the_repo_walkup_when_plugins_root_is_unset() -> None:
+    """Local dev / this module's own tests: no BIFFO_PLUGINS_ROOT, so
+    resolution walks up from this module and finds the real repo-root
+    manifest -- unchanged from before this fix."""
+    from ideation.manifest import MANIFEST_PATH, _resolve_manifest_path
+
+    assert _resolve_manifest_path(None) == MANIFEST_PATH
+    assert MANIFEST_PATH.is_file()
+
+
+def test_falls_back_when_plugins_root_is_empty_string() -> None:
+    from ideation.manifest import MANIFEST_PATH, _resolve_manifest_path
+
+    assert _resolve_manifest_path("") == MANIFEST_PATH
+
+
+def test_old_walkup_alone_cannot_find_the_manifest_under_the_deployed_layout(
+    tmp_path, monkeypatch
+) -> None:
+    """Fail-first: reproduces the exact crash this issue reports. Simulates the
+    deployed layout -- this module's own __file__ living under a flattened
+    task root, with no biffo.plugin.json anywhere in its parent chain (it's a
+    sibling under services/, per deploy-app.yml) -- and shows the walk-up
+    genuinely finds nothing there. Without the BIFFO_PLUGINS_ROOT branch this
+    fix adds, that nonexistent last-resort path is exactly what MANIFEST_PATH
+    resolved to in production, and manifest_required_group()'s .read_text()
+    raised FileNotFoundError at import time, crashing the whole Lambda."""
+    import ideation.manifest as manifest_module
+
+    task_root = tmp_path / "var" / "task"
+    fake_module_file = task_root / "ideation" / "manifest.py"
+    fake_module_file.parent.mkdir(parents=True)
+    fake_module_file.write_text("")
+
+    monkeypatch.setattr(manifest_module, "__file__", str(fake_module_file))
+
+    result = manifest_module._resolve_manifest_path(None)
+
+    assert not result.is_file(), (
+        "the walk-up alone found a manifest under the flattened deploy layout "
+        "-- it shouldn't, since the real manifest sits at services/ideation/, "
+        "a sibling of the flattened src/, not an ancestor of it"
+    )
+
+
 def test_no_module_hardcodes_a_group_literal_in_its_gate() -> None:
     """The guard, not just the fix: every ``require_group(...)`` in the package
     must take its argument from the manifest helper.
