@@ -12,6 +12,7 @@ scoping, the two agent prompts (its actual IP), and report extraction.
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -104,10 +105,10 @@ def extract_report(run_messages: list[dict[str, Any]]) -> Report:
             if function.get("name") != REPORT_TOOL_NAME:
                 continue
             arguments = function.get("arguments")
-            data = parse_json_text(arguments)
             try:
+                data = parse_json_text(arguments)
                 return Report.model_validate(data)
-            except ValidationError as exc:
+            except (json.JSONDecodeError, ValidationError) as exc:
                 raise MalformedReportError(str(exc)) from exc
     raise MalformedReportError(f"the analysis run produced no {REPORT_TOOL_NAME} tool call")
 

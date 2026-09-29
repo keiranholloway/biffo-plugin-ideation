@@ -674,6 +674,23 @@ class TestExtractReport:
         with pytest.raises(MalformedReportError):
             extract_report(_analysis_run(bad))
 
+    def test_truncated_json_arguments_are_malformed(self) -> None:
+        run = [
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "submit_ideation_report",
+                            "arguments": '{"prd": {"problem": "cut of',
+                        }
+                    }
+                ],
+            }
+        ]
+        with pytest.raises(MalformedReportError):
+            extract_report(run)
+
 
 class TestSubmittedIdea:
     def test_get_submitted_idea_returns_the_idea(self) -> None:
