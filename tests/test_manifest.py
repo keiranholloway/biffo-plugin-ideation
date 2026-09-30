@@ -75,7 +75,14 @@ def test_capability_pins_are_ranges_not_bare_versions() -> None:
 # model catalog) is the deliberate exception: it isn't owned by any one founder,
 # so it uses Core's plugin-declared generic CRUD (ADR-0004), gated to the admin
 # role instead of owner-scoped. See test_admin_managed_tables_require_the_admin_role.
-_OWNER_SCOPED_TABLES = frozenset({"ideation_sessions", "ideation_reports"})
+_OWNER_SCOPED_TABLES = frozenset(
+    {
+        "ideation_sessions",
+        "ideation_reports",
+        "brainstorm_sessions",
+        "brainstorm_opportunities",
+    }
+)
 
 
 def test_owner_scoped_tables_stay_crud_closed() -> None:

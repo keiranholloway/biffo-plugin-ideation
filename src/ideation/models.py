@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .definitions import CHALLENGER_AGENT_NAME
 
@@ -67,3 +67,85 @@ class TurnResult:
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost_usd: float | None = None
+
+
+# Brain-Storming session lifecycle.
+BS_QUALIFYING = "qualifying"  # the qualifying chat is in progress
+BS_RESEARCHING = "researching"  # the parallel research agents are running
+BS_SYNTHESISING = "synthesising"  # the synthesis agent is reconciling findings
+BS_COMPLETE = "complete"  # ranked opportunities are stored
+BS_FAILED = "failed"
+BRAINSTORM_STATUSES = frozenset(
+    {BS_QUALIFYING, BS_RESEARCHING, BS_SYNTHESISING, BS_COMPLETE, BS_FAILED}
+)
+
+# Agent-run status values (Core's AgentRun) — ``RUN_COMPLETED``/``RUN_FAILED``
+# above are the terminal ones; a run is terminal when in ``RUN_TERMINAL``.
+
+
+@dataclass(frozen=True)
+class AgentRunView:
+    """A read of an async agent run (Core's AgentRun) — just what the plugin
+    needs to decide whether it is done and to extract its output-tool call."""
+
+    id: str
+    status: str
+    messages: list[dict[str, object]] = field(default_factory=list)
+    model: str | None = None
+    #: When a runtime claimed this run. None means nothing ever picked it up.
+    started_at: str | None = None
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in RUN_TERMINAL
+
+    @property
+    def succeeded(self) -> bool:
+        return self.status == RUN_COMPLETED
+
+    @property
+    def never_started(self) -> bool:
+        """Terminal, unsuccessful, and never claimed by a runtime.
+
+        A run reaches ``running`` only by being claimed, so ``started_at`` is the
+        structural signal that nothing ever picked it up. Deliberately not a
+        substring match on Core's error text, which is prose that can be reworded.
+        """
+        return self.is_terminal and not self.succeeded and self.started_at is None
+
+
+@dataclass(frozen=True)
+class BrainstormSession:
+    """A Brain-Storming session — one qualified brief researched by parallel agents."""
+
+    id: str
+    owner_sub: str
+    status: str
+    title: str | None = None
+    target: str | None = None
+    geography: str | None = None
+    problem: str | None = None
+    brief: dict[str, object] | None = None
+    thread_id: str | None = None
+    turn_count: int = 0
+    chain_id: str | None = None
+    research_run_ids: list[str] = field(default_factory=list)
+    synthesis_run_id: str | None = None
+    failure_reason: str | None = None
+    created_at: str | None = None
+    deleted: bool = False
+
+
+@dataclass(frozen=True)
+class BrainstormOpportunity:
+    """One ranked business opportunity a Brain-Storming session produced."""
+
+    id: str
+    owner_sub: str
+    session_id: str
+    rank: int
+    title: str
+    pitch: str
+    rationale: str | None = None
+    evidence: object | None = None
+    model: str | None = None

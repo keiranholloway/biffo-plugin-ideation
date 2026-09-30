@@ -19,7 +19,14 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from .models import Run, Session, TurnResult
+from .models import (
+    AgentRunView,
+    BrainstormOpportunity,
+    BrainstormSession,
+    Run,
+    Session,
+    TurnResult,
+)
 
 
 class CoreGateway(Protocol):
@@ -146,4 +153,81 @@ class CoreGateway(Protocol):
         prefill source). ``owner_sub`` is accepted for parity with the rest of this
         port and used by non-HTTP adapters/fakes; the real HTTP adapter relies on
         Core's forwarded-token scoping instead."""
+        ...
+
+    # ── Brain-Storming: fan-out primitives ───────────────────────────────────
+
+    async def request_agent_run(
+        self,
+        *,
+        agent_name: str,
+        definition: dict[str, Any],
+        output_tool: dict[str, Any],
+        input_payload: dict[str, Any],
+        causation_id: str,
+    ) -> str:
+        """Request one async agent run; returns its id.
+
+        No thread: the run's whole context is ``input_payload``. ``output_tool``
+        is registered as the run's structured output tool — never a registry tool.
+
+        ``causation_id`` is **required**. It is what makes the parallel research
+        runs siblings of one chain, the only way the orchestration engine's
+        fan-in recognises them as a set. A run sent without one is a chain root,
+        and a fan-in waiting on it would wait forever."""
+        ...
+
+    async def find_chain_run(self, *, chain_id: str, agent_name: str) -> AgentRunView | None:
+        """The run of ``agent_name`` in this causation chain, if one exists yet —
+        how the plugin discovers a run the orchestration engine created on its
+        behalf. ``None`` while the engine has not fired it."""
+        ...
+
+    async def get_agent_run(self, *, run_id: str) -> AgentRunView | None:
+        """Read an agent run's state and transcript. ``None`` if Core has no such
+        run — the caller treats that as a failure, not "still running"."""
+        ...
+
+    # ── Brain-Storming: sessions and opportunities ───────────────────────────
+
+    async def create_brainstorm_session(
+        self,
+        *,
+        owner_sub: str,
+        target: str | None,
+        geography: str | None,
+        problem: str | None,
+        thread_id: str,
+        title: str | None = None,
+    ) -> BrainstormSession: ...
+
+    async def get_brainstorm_session(
+        self, *, owner_sub: str, session_id: str
+    ) -> BrainstormSession | None: ...
+
+    async def list_brainstorm_sessions(self, *, owner_sub: str) -> list[BrainstormSession]:
+        """Every non-deleted session owned by this founder, in no particular
+        order — the caller sorts."""
+        ...
+
+    async def update_brainstorm_session(self, *, session_id: str, **fields: Any) -> None:
+        """Patch a session row. Generic so the service can advance several fields
+        together (status plus chain_id/research_run_ids, or status plus
+        failure_reason) in one call. ``brief`` and ``research_run_ids`` are
+        JSON-serialised by the adapter."""
+        ...
+
+    async def delete_brainstorm_session(self, *, session_id: str) -> None: ...
+
+    async def save_brainstorm_opportunities(
+        self, *, session_id: str, opportunities: list[dict[str, Any]], model: str | None
+    ) -> None:
+        """Persist the ranked shortlist. Sends no owner — Core stamps it from the
+        forwarded token."""
+        ...
+
+    async def list_brainstorm_opportunities(
+        self, *, owner_sub: str, session_id: str
+    ) -> list[BrainstormOpportunity]:
+        """This session's stored opportunities, ascending by rank."""
         ...
