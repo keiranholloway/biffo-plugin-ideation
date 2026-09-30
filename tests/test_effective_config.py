@@ -70,8 +70,12 @@ class TestBuiltinAgents:
         two are what drives every request until an admin overrides them."""
         agents = builtin_chat_agents()
 
-        assert [a["agent_key"] for a in agents] == [CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME]
-        assert [a["role"] for a in agents] == ["challenger", "analyst"]
+        assert [a["agent_key"] for a in agents] == [
+            CHALLENGER_AGENT_NAME,
+            ANALYST_AGENT_NAME,
+            "ideation-brainstorm-qualifier",
+        ]
+        assert [a["role"] for a in agents] == ["challenger", "analyst", "qualifier"]
 
     def test_the_seeded_required_group_is_derived_from_the_manifest(self) -> None:
         """Issue #171 — the authorisation half of this payload.
@@ -88,7 +92,7 @@ class TestBuiltinAgents:
         again) and equal to the concrete group the owner decided on (so the two
         cannot quietly drift together and still pass).
         """
-        challenger, analyst = builtin_chat_agents()
+        challenger, analyst, _qualifier = builtin_chat_agents()
         manifest_group = manifest_required_group("user_ingress")
 
         assert manifest_group == "admin"  # owner decision B, biffo-platform-app#70
@@ -100,7 +104,7 @@ class TestBuiltinAgents:
         """Not a paraphrase of the defaults — the same constants ``service.py``
         falls back to. A panel showing a stale copy would be as misleading as
         the empty one it replaces."""
-        challenger, analyst = builtin_chat_agents()
+        challenger, analyst, _qualifier = builtin_chat_agents()
 
         assert challenger["system_prompt"] == CHALLENGER_INSTRUCTIONS
         assert analyst["system_prompt"] == ANALYST_INSTRUCTIONS
@@ -132,7 +136,7 @@ class TestBuiltinAgents:
         behaviour, which is the trap issue #58 describes."""
         from scripts.seed_chat_agents import build_analyst_payload, build_payload
 
-        challenger, analyst = builtin_chat_agents()
+        challenger, analyst, _qualifier = builtin_chat_agents()
         assert build_payload() == challenger
         assert build_analyst_payload() == analyst
 
@@ -173,6 +177,7 @@ class TestModelResolution:
         assert [a["model"] for a in builtin_chat_agents()] == [
             "vendor/chat-x",
             "vendor/analysis-x",
+            "vendor/chat-x",
         ]
 
 
