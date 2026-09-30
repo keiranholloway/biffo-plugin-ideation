@@ -50,6 +50,7 @@ import os
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from .brainstorm_definitions import QUALIFIER_AGENT_NAME, QUALIFIER_INSTRUCTIONS
 from .definitions import (
     ANALYST_AGENT_NAME,
     ANALYST_INSTRUCTIONS,
@@ -61,6 +62,7 @@ from .manifest import manifest_required_group
 #: Role names as the stored chat-agent rows spell them.
 CHALLENGER_ROLE = "challenger"
 ANALYST_ROLE = "analyst"
+QUALIFIER_ROLE = "qualifier"
 
 #: The environment variables that override the built-in model choices, and the
 #: values used when they are unset. Nothing in this deployment sets either var.
@@ -168,6 +170,15 @@ def builtin_chat_agents() -> list[dict[str, Any]]:
             "role": "analyst",
             "system_prompt": ANALYST_INSTRUCTIONS,
             "model": analysis_model(),
+            "required_group": required_group,
+            "active": True,
+        },
+        {
+            "agent_key": QUALIFIER_AGENT_NAME,
+            "agent_name": QUALIFIER_AGENT_NAME,
+            "role": QUALIFIER_ROLE,
+            "system_prompt": QUALIFIER_INSTRUCTIONS,
+            "model": chat_model(),
             "required_group": required_group,
             "active": True,
         },
