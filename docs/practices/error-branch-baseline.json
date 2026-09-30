@@ -5,6 +5,6 @@
     "scripts/error_branch_coverage.py:262:fallback:if node.type is None -> 'except:'",
     "scripts/error_branch_coverage.py:337:except:except SyntaxError",
     "scripts/error_branch_coverage.py:400:fallback:if not baseline.is_file() -> None",
-    "src/ideation/service.py:282:fallback:if session.status != ANALYSING or session.analysis_ru -> None"
+    "src/ideation/service.py:285:fallback:if session.status != ANALYSING or session.analysis_ru -> None"
   ]
 }

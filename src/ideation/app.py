@@ -20,12 +20,13 @@ from __future__ import annotations
 import logging
 
 from biffo_plugin_sdk import ForwardedUser, require_group
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpError, CoreHttpGateway
+from .brainstorm_definitions import QUALIFIER_MAX_TURNS
 from .definitions import MAX_TURNS, MIN_TURNS
 from .effective_config import builtin_chat_agents
 from .manifest import manifest_required_group
@@ -33,6 +34,7 @@ from .models import ANALYSING, GATHERING
 from .service import (
     AgentConfigMissingError,
     AnalysisFailedError,
+    BrainstormService,
     IdeationError,
     IdeationService,
     MalformedReportError,
@@ -300,3 +302,110 @@ async def read_report(
     report = await svc.get_report(owner_sub=founder.sub, session_id=session_id)
     state = await svc.get_session(owner_sub=founder.sub, session_id=session_id)
     return {"status": state.status, "title": _display_title(state), "report": report}
+
+
+# ── Brain-Storming: qualifying chat ──────────────────────────────────────────
+# Deliberately no "launch research" route yet — that is the next milestone.
+
+
+def get_brainstorm_service(founder: ForwardedUser = Depends(require_founder)) -> BrainstormService:
+    return BrainstormService(CoreHttpGateway(CoreTransport(founder_token=founder.token)))
+
+
+class StartBrainstormRequest(BaseModel):
+    """At least one of the three must be given — it seeds the first qualifier turn."""
+
+    target: str | None = Field(default=None, max_length=4_000)
+    geography: str | None = Field(default=None, max_length=4_000)
+    problem: str | None = Field(default=None, max_length=8_000)
+
+
+def _bs_state(session) -> dict:  # type: ignore[no-untyped-def]
+    return {
+        "session_id": session.id,
+        "status": session.status,
+        "title": session.title,
+        "target": session.target,
+        "geography": session.geography,
+        "problem": session.problem,
+        "turn_count": session.turn_count,
+        "max_turns": QUALIFIER_MAX_TURNS,
+        "created_at": session.created_at,
+    }
+
+
+def _opening_message(body: StartBrainstormRequest) -> str:
+    parts = [
+        f"{label}: {value.strip()}"
+        for label, value in (
+            ("Target", body.target),
+            ("Geography", body.geography),
+            ("Problem area", body.problem),
+        )
+        if value and value.strip()
+    ]
+    return "\n".join(parts)
+
+
+@app.post("/brainstorm/sessions", status_code=201)
+async def start_brainstorm_session(
+    body: StartBrainstormRequest,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """Open a qualifying session and run the qualifier's opening turn."""
+    opening = _opening_message(body)
+    if not opening:
+        raise HTTPException(
+            status_code=422, detail="Provide at least one of target, geography or problem."
+        )
+    session = await svc.start_session(
+        owner_sub=founder.sub,
+        target=body.target,
+        geography=body.geography,
+        problem=body.problem,
+    )
+    turn = await svc.chat_turn(owner_sub=founder.sub, session_id=session.id, user_message=opening)
+    state = await svc.get_session(owner_sub=founder.sub, session_id=session.id)
+    return {"reply": turn.reply, **_bs_state(state)}
+
+
+@app.get("/brainstorm/sessions")
+async def list_brainstorm_sessions(
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> list[dict]:
+    return [_bs_state(s) for s in await svc.list_sessions(owner_sub=founder.sub)]
+
+
+@app.post("/brainstorm/sessions/{session_id}/messages")
+async def send_brainstorm_message(
+    session_id: str,
+    body: MessageRequest,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """One founder turn in the qualifying chat (capped)."""
+    turn = await svc.chat_turn(
+        owner_sub=founder.sub, session_id=session_id, user_message=body.message
+    )
+    state = await svc.get_session(owner_sub=founder.sub, session_id=session_id)
+    return {"reply": turn.reply, **_bs_state(state)}
+
+
+@app.get("/brainstorm/sessions/{session_id}")
+async def read_brainstorm_session(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    return _bs_state(await svc.get_session(owner_sub=founder.sub, session_id=session_id))
+
+
+@app.post("/brainstorm/sessions/{session_id}/delete", status_code=204)
+async def delete_brainstorm_session(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> None:
+    await svc.delete_session(owner_sub=founder.sub, session_id=session_id)

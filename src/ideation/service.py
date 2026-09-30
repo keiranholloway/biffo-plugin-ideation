@@ -18,6 +18,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from .brainstorm_definitions import QUALIFIER_AGENT_NAME, QUALIFIER_MAX_TURNS
 from .definitions import (
     ANALYST_AGENT_NAME,
     CHALLENGER_AGENT_NAME,
@@ -31,10 +32,12 @@ from .definitions import (
 from .json_text import parse_json_text
 from .models import (
     ANALYSING,
+    BS_QUALIFYING,
     COMPLETE,
     GATHERING,
     RUN_COMPLETED,
     RUN_TERMINAL,
+    BrainstormSession,
     Session,
     TurnResult,
 )
@@ -300,3 +303,76 @@ class IdeationService:
         )
         await self._core.set_status(session_id=session_id, status=COMPLETE)
         return await self._core.get_report(session_id=session_id)
+
+
+class BrainstormService:
+    """The Brain-Storming qualifying chat — transport-agnostic, like
+    :class:`IdeationService`. Sessions start in ``qualifying``; each turn is a
+    buffered chat turn with the qualifier agent, capped at
+    ``QUALIFIER_MAX_TURNS``. There is deliberately no launch-research action yet."""
+
+    def __init__(self, core: CoreGateway, *, max_turns: int = QUALIFIER_MAX_TURNS) -> None:
+        self._core = core
+        self._max_turns = max_turns
+
+    async def start_session(
+        self,
+        *,
+        owner_sub: str,
+        target: str | None = None,
+        geography: str | None = None,
+        problem: str | None = None,
+        title: str | None = None,
+    ) -> BrainstormSession:
+        def clean(v: str | None) -> str | None:
+            return (v or "").strip() or None
+
+        return await self._core.create_brainstorm_session(
+            owner_sub=owner_sub,
+            target=clean(target),
+            geography=clean(geography),
+            problem=clean(problem),
+            thread_id=str(uuid.uuid4()),
+            title=clean(title),
+        )
+
+    async def _load_owned(self, *, owner_sub: str, session_id: str) -> BrainstormSession:
+        session = await self._core.get_brainstorm_session(
+            owner_sub=owner_sub, session_id=session_id
+        )
+        if session is None or session.deleted:
+            raise SessionNotFoundError(session_id)
+        return session
+
+    async def get_session(self, *, owner_sub: str, session_id: str) -> BrainstormSession:
+        return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+
+    async def list_sessions(self, *, owner_sub: str) -> list[BrainstormSession]:
+        """The founder's sessions, most-recent-first, soft-deleted excluded."""
+        sessions = await self._core.list_brainstorm_sessions(owner_sub=owner_sub)
+        return sorted(
+            (s for s in sessions if not s.deleted), key=lambda s: s.created_at or "", reverse=True
+        )
+
+    async def chat_turn(self, *, owner_sub: str, session_id: str, user_message: str) -> TurnResult:
+        """Run one buffered qualifier turn, then advance the turn counter."""
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.status != BS_QUALIFYING or session.thread_id is None:
+            raise NotGatheringError(session.status)
+        if session.turn_count >= self._max_turns:
+            raise TurnLimitReachedError(self._max_turns)
+
+        result = await self._core.run_chat_turn(
+            thread_id=session.thread_id,
+            owner_sub=owner_sub,
+            agent_name=QUALIFIER_AGENT_NAME,
+            user_text=user_message,
+        )
+        await self._core.update_brainstorm_session(
+            session_id=session_id, turn_count=session.turn_count + 1
+        )
+        return result
+
+    async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
+        await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        await self._core.delete_brainstorm_session(session_id=session_id)
