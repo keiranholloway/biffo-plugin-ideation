@@ -5,6 +5,7 @@ import { ApiError, createApi, type Agent, type Api, type Report, type SessionSta
 import { isFounder, REQUIRED_GROUP } from './lib/roles'
 import { ReportCard } from './components/ReportCard'
 import { Sidebar } from './components/Sidebar'
+import { BrainStorm } from './components/BrainStorm'
 
 interface Msg {
   role: 'you' | 'ideation'
@@ -15,6 +16,8 @@ type View =
   | { kind: 'new' }
   | { kind: 'live'; sessionId: string }
   | { kind: 'report'; sessionId: string }
+
+type Tab = 'pressure-test' | 'brain-storm'
 
 function errorText(e: unknown): string {
   if (e instanceof ApiError) return `${e.status}: ${e.message}`
@@ -35,6 +38,29 @@ function readSeedParam(): string {
   return seed ? seed.slice(0, MAX_SEED_LENGTH) : ''
 }
 
+function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'pressure-test', label: 'Pressure Test' },
+    { id: 'brain-storm', label: 'Brain-Storm' },
+  ]
+  return (
+    <div role="tablist" className="ide-tabs">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={tab === t.id}
+          className={tab === t.id ? 'ide-tab ide-tab--active' : 'ide-tab'}
+          onClick={() => onChange(t.id)}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function App() {
   const [api, setApi] = useState<Api | null>(null)
   const [ready, setReady] = useState(false)
@@ -42,6 +68,7 @@ export default function App() {
   // out" (which redirects to the portal login) — re-authenticating would not
   // help, so say so instead of bouncing them round a loop.
   const [notPermitted, setNotPermitted] = useState(false)
+  const [tab, setTab] = useState<Tab>('pressure-test')
   const [view, setView] = useState<View>({ kind: 'new' })
   // Lazy initialiser: read once, at mount. After this the box belongs to the
   // founder — editing or clearing it is never overwritten by the param.
@@ -283,11 +310,24 @@ export default function App() {
 
   const activeSessionId = view.kind === 'live' || view.kind === 'report' ? view.sessionId : null
 
+  if (tab === 'brain-storm') {
+    return (
+      <div className="ide-layout">
+        <main className="ide">
+          <h1>Ideation Engine</h1>
+          <TabBar tab={tab} onChange={setTab} />
+          {api && <BrainStorm api={api} />}
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="ide-layout">
       <Sidebar sessions={sessions} activeId={activeSessionId} onSelect={handleSelectSession} onNewIdea={handleNewIdea} onDelete={handleDeleteSession} loadFailed={sessionsFailed} loaded={sessionsLoaded} />
       <main className="ide">
         <h1>Ideation Engine</h1>
+        <TabBar tab={tab} onChange={setTab} />
         {error && <div className="ide-error">{error}</div>}
 
         {view.kind === 'new' && !session && (

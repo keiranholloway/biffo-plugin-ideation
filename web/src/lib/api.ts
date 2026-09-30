@@ -85,6 +85,28 @@ export interface Agent {
   agent_name: string
 }
 
+export interface BrainstormIntake {
+  target?: string
+  geography?: string
+  problem?: string
+}
+
+export interface BrainstormState {
+  session_id: string
+  status: string
+  title: string
+  target: string | null
+  geography: string | null
+  problem: string | null
+  turn_count: number
+  max_turns: number
+  created_at: string
+}
+
+export interface BrainstormTurn extends BrainstormState {
+  reply: string
+}
+
 export type Api = ReturnType<typeof createApi>
 
 // Async on purpose: the token is resolved per request, not snapshotted, so an
@@ -129,5 +151,9 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
     listSessions: () => request<SessionSummary[]>('GET', '/sessions'),
     getSubmittedIdea: () => request<{ idea: string | null }>('GET', '/submitted-idea'),
     getAgents: () => request<Agent[]>('GET', '/agents'),
+    startBrainstorm: (intake: BrainstormIntake) =>
+      request<BrainstormTurn>('POST', '/brainstorm/sessions', intake),
+    sendBrainstormMessage: (id: string, message: string) =>
+      request<BrainstormTurn>('POST', `/brainstorm/sessions/${id}/messages`, { message }),
   }
 }
