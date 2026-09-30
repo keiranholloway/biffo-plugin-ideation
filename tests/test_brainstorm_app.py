@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from biffo_plugin_sdk import ForwardedUser
@@ -70,7 +70,7 @@ def client(core: FakeCore) -> Iterator[TestClient]:
     app.dependency_overrides[require_founder] = lambda: ForwardedUser(
         sub="alice", groups=["founder"], token="tok"
     )
-    app.dependency_overrides[get_brainstorm_service] = lambda: BrainstormService(core)
+    app.dependency_overrides[get_brainstorm_service] = lambda: BrainstormService(cast(Any, core))
     yield TestClient(app)
     app.dependency_overrides.clear()
 
