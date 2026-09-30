@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Seed the ideation-challenger and ideation-analyst rows into Core's live
+"""Seed the ideation-challenger, ideation-analyst and
+ideation-brainstorm-qualifier rows into Core's live
 chat-agent registry.
 
 This is now a manual, operator-driven entry point, **not a hard prerequisite**
 (issue #93). Both plugin apps (``ideation.app`` and ``ideation.admin_app``)
-seed the same two rows automatically on every cold start, insert-if-absent, via
+seed the same three rows automatically on every cold start, insert-if-absent, via
 ``POST /internal/plugins/me/config/seed``. This script exists for the same
 reason ``biffo-plugin-idea-scout``'s manual seed script does: an operator with
 real Cognito admin credentials can run it ahead of time (e.g. before the
@@ -18,7 +19,7 @@ Before issue #93, this really was a hard prerequisite: with
 every founder chat turn 404ing, and — contrary to what this docstring used to
 claim — the analyst was no safer: ``IdeationService.finalise()`` no longer
 falls back to the built-in default when its row is absent; it raises
-``AgentConfigMissingError``. Both roles are equally a deployment-ordering
+``AgentConfigMissingError``. All roles are equally a deployment-ordering
 hazard if nothing ever seeds them; automatic startup seeding is what removes
 that hazard now, not this script.
 
@@ -63,6 +64,12 @@ def build_analyst_payload() -> dict:
     return _builtin("analyst")
 
 
+def build_qualifier_payload() -> dict:
+    """The exact brainstorm qualifier seed row. Without it,
+    ``POST /brainstorm/sessions`` and ``/messages`` fail."""
+    return _builtin("qualifier")
+
+
 def _seed_one(payload: dict, *, core_api_url: str, admin_token: str) -> bool:
     """POST one payload; True on success (created or already-seeded), False on
     a real failure."""
@@ -93,7 +100,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    payloads = [build_payload(), build_analyst_payload()]
+    payloads = [build_payload(), build_analyst_payload(), build_qualifier_payload()]
 
     if args.dry_run:
         import json
@@ -111,7 +118,7 @@ def main() -> int:
         return 1
 
     # A list comprehension (not a generator into all()) so a failure on the
-    # challenger doesn't short-circuit and skip attempting the analyst too.
+    # challenger doesn't short-circuit and skip attempting the others too.
     results = [_seed_one(p, core_api_url=core_api_url, admin_token=admin_token) for p in payloads]
     return 0 if all(results) else 1
 
