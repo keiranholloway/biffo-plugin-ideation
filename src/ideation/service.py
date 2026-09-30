@@ -108,7 +108,7 @@ def extract_report(run_messages: list[dict[str, Any]]) -> Report:
             try:
                 data = parse_json_text(arguments)
                 return Report.model_validate(data)
-            except (json.JSONDecodeError, ValidationError) as exc:
+            except (json.JSONDecodeError, ValidationError, RecursionError) as exc:
                 raise MalformedReportError(str(exc)) from exc
     raise MalformedReportError(f"the analysis run produced no {REPORT_TOOL_NAME} tool call")
 
