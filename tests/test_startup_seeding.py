@@ -43,6 +43,7 @@ from typing import Any
 
 import pytest
 
+from ideation.brainstorm_definitions import brainstorm_seed_payloads
 from ideation.definitions import ANALYST_AGENT_NAME, CHALLENGER_AGENT_NAME
 from ideation.effective_config import builtin_chat_agents
 
@@ -125,8 +126,10 @@ class TestBothAppsSeedAtStartup:
         sent = gateway.seed_calls[0]
         # The exact payload builtin_chat_agents() returns — not a second,
         # independently-built copy that could drift from it.
-        assert sent == builtin_chat_agents()
-        assert {row["agent_key"] for row in sent} == {CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME}
+        assert sent == [*builtin_chat_agents(), *brainstorm_seed_payloads()]
+        keys = {row["agent_key"] for row in sent}
+        assert {CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME} <= keys
+        assert len(sent) == 10  # challenger + analyst + the eight Brain-Storming roles
 
     @pytest.mark.parametrize("module_name", ["ideation.app", "ideation.admin_app"])
     def test_a_transient_core_failure_at_startup_is_logged_not_raised(

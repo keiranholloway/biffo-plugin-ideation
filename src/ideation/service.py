@@ -12,13 +12,24 @@ scoping, the two agent prompts (its actual IP), and report extraction.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from typing import Any
 
 from pydantic import ValidationError
 
-from .brainstorm_definitions import QUALIFIER_AGENT_NAME, QUALIFIER_MAX_TURNS
+from .brainstorm_definitions import (
+    MAX_OPPORTUNITIES,
+    OPPORTUNITIES_TOOL_NAME,
+    QUALIFIER_AGENT_NAME,
+    QUALIFIER_MAX_TURNS,
+    RESEARCH_AGENT_NAMES,
+    SYNTHESIS_AGENT_NAME,
+    OpportunitySet,
+    findings_tool_schema,
+    research_definition,
+)
 from .definitions import (
     ANALYST_AGENT_NAME,
     CHALLENGER_AGENT_NAME,
@@ -32,7 +43,11 @@ from .definitions import (
 from .json_text import parse_json_text
 from .models import (
     ANALYSING,
+    BS_COMPLETE,
+    BS_FAILED,
     BS_QUALIFYING,
+    BS_RESEARCHING,
+    BS_SYNTHESISING,
     COMPLETE,
     GATHERING,
     RUN_COMPLETED,
@@ -305,6 +320,39 @@ class IdeationService:
         return await self._core.get_report(session_id=session_id)
 
 
+class MalformedOpportunitiesError(IdeationError):
+    """The synthesis run finished without a valid structured shortlist. Caught by
+    the service and recorded as a failed *session*, not raised to the caller."""
+
+
+def extract_opportunities(run_messages: list[dict[str, Any]]) -> OpportunitySet:
+    """Pull the ranked shortlist out of the synthesis run's transcript (the last
+    call to the output tool — a retried malformed call supersedes the earlier one).
+    Raises :class:`MalformedOpportunitiesError` if missing or invalid."""
+    found: Any = None
+    for message in run_messages:
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            if function.get("name") != OPPORTUNITIES_TOOL_NAME:
+                continue
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                try:
+                    found = json.loads(arguments)
+                except json.JSONDecodeError:
+                    continue
+            else:
+                found = arguments
+    if found is None:
+        raise MalformedOpportunitiesError(
+            f"the synthesis run produced no {OPPORTUNITIES_TOOL_NAME} tool call"
+        )
+    try:
+        return OpportunitySet.model_validate(found)
+    except ValidationError as exc:
+        raise MalformedOpportunitiesError(str(exc)) from exc
+
+
 class BrainstormService:
     """The Brain-Storming qualifying chat — transport-agnostic, like
     :class:`IdeationService`. Sessions start in ``qualifying``; each turn is a
@@ -345,7 +393,14 @@ class BrainstormService:
         return session
 
     async def get_session(self, *, owner_sub: str, session_id: str) -> BrainstormSession:
-        return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        """The session's current state, advancing the state machine if the agent
+        runs it is waiting on have finished. Safe to poll repeatedly."""
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.status == BS_RESEARCHING:
+            return await self._advance_research(session)
+        if session.status == BS_SYNTHESISING:
+            return await self._advance_synthesis(session)
+        return session
 
     async def list_sessions(self, *, owner_sub: str) -> list[BrainstormSession]:
         """The founder's sessions, most-recent-first, soft-deleted excluded."""
@@ -376,3 +431,151 @@ class BrainstormService:
     async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
         await self._load_owned(owner_sub=owner_sub, session_id=session_id)
         await self._core.delete_brainstorm_session(session_id=session_id)
+
+    # ── Research fan-out ─────────────────────────────────────────────────────
+
+    async def finalise(self, *, owner_sub: str, session_id: str) -> BrainstormSession:
+        """Fire all six research agents under one causation chain and move the
+        session to ``researching``.
+
+        The shared ``chain_id`` is what makes them siblings the orchestration
+        engine's ``agent_fan_in`` recognises as a set; six uncorrelated runs would
+        each be a chain root and the join would never fire. Each agent's prompt and
+        model are read live from its seeded config row — required, no fallback.
+        """
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.status != BS_QUALIFYING:
+            raise NotGatheringError(session.status)
+
+        brief: dict[str, Any] = {
+            "target": session.target,
+            "geography": session.geography,
+            "problem": session.problem,
+        }
+        if session.brief:
+            brief["qualified_brief"] = session.brief
+
+        chain_id = str(uuid.uuid4())
+        research_run_ids: list[str] = []
+        for agent_name in RESEARCH_AGENT_NAMES:
+            config = await self._core.get_own_config(role=agent_name)
+            if config is None:
+                raise AgentConfigMissingError(agent_name)
+            research_run_ids.append(
+                await self._core.request_agent_run(
+                    agent_name=agent_name,
+                    definition=research_definition(
+                        model=config["model"], instructions=config["system_prompt"]
+                    ),
+                    output_tool=findings_tool_schema(),
+                    input_payload={"brief": brief},
+                    causation_id=chain_id,
+                )
+            )
+        await self._core.update_brainstorm_session(
+            session_id=session_id,
+            status=BS_RESEARCHING,
+            chain_id=chain_id,
+            research_run_ids=research_run_ids,
+        )
+        return dataclasses.replace(
+            session,
+            status=BS_RESEARCHING,
+            chain_id=chain_id,
+            research_run_ids=research_run_ids,
+        )
+
+    # ── State transitions ────────────────────────────────────────────────────
+
+    #: Shown when an agent run was never claimed by a runtime rather than having
+    #: run and gone wrong — an infrastructure fault a retry usually fixes.
+    NEVER_STARTED_REASON = (
+        "This brain-storm never started — the work was queued but nothing picked it up, "
+        "so no research ran and nothing was charged for it. This is a fault on our "
+        "side, not with what you asked for. Running it again usually works."
+    )
+
+    async def _advance_research(self, session: BrainstormSession) -> BrainstormSession:
+        """Research -> synthesis, once the engine has fired the synthesis run.
+
+        The orchestration engine watches the research set and fires synthesis
+        itself; this only discovers that run (nothing tells the plugin its id) and
+        records it. A research set that failed outright never produces a synthesis
+        run, so that case is detected here rather than left to hang.
+        """
+        if session.chain_id is None:  # pragma: no cover — researching implies a chain
+            return session
+        synthesis = await self._core.find_chain_run(
+            chain_id=session.chain_id, agent_name=SYNTHESIS_AGENT_NAME
+        )
+        if synthesis is not None:
+            await self._core.update_brainstorm_session(
+                session_id=session.id, status=BS_SYNTHESISING, synthesis_run_id=synthesis.id
+            )
+            return dataclasses.replace(
+                session, status=BS_SYNTHESISING, synthesis_run_id=synthesis.id
+            )
+
+        views = [await self._core.get_agent_run(run_id=rid) for rid in session.research_run_ids]
+        if any(v is not None and not v.is_terminal for v in views):
+            return session  # still researching
+        if any(v is not None and v.succeeded for v in views):
+            # Terminal with at least one success: the engine is entitled to a
+            # moment to react to the completion event — don't race it to a
+            # false failure.
+            return session
+        if views and all(v is not None and v.never_started for v in views):
+            return await self._fail(session, self.NEVER_STARTED_REASON)
+        return await self._fail(
+            session,
+            "Every research agent failed to return usable findings. "
+            "Nothing was found to build opportunities from — try running again.",
+        )
+
+    async def _advance_synthesis(self, session: BrainstormSession) -> BrainstormSession:
+        """Synthesis -> complete, storing the ranked opportunities."""
+        if session.synthesis_run_id is None:  # pragma: no cover — guarded by the caller
+            return session
+        view = await self._core.get_agent_run(run_id=session.synthesis_run_id)
+        if view is not None and not view.is_terminal:
+            return session  # still synthesising
+        if view is not None and view.never_started:
+            return await self._fail(session, self.NEVER_STARTED_REASON)
+        if view is None or not view.succeeded:
+            return await self._fail(
+                session, "The analysis that ranks the opportunities failed. Try running again."
+            )
+        try:
+            opportunity_set = extract_opportunities(view.messages)
+        except MalformedOpportunitiesError:
+            return await self._fail(
+                session, "The analysis finished but returned nothing usable. Try running again."
+            )
+
+        # Trim rather than reject: an over-long list is the model ignoring its
+        # brief, and the extras are the ones it ranked lowest.
+        opportunities = [
+            {
+                "title": o.title,
+                "pitch": o.pitch,
+                "rationale": o.rationale,
+                "evidence": [src.model_dump() for src in o.sources],
+            }
+            for o in opportunity_set.opportunities
+        ][:MAX_OPPORTUNITIES]
+        if not opportunities:
+            return await self._fail(
+                session, "The analysis returned no opportunities at all. Try running again."
+            )
+
+        await self._core.save_brainstorm_opportunities(
+            session_id=session.id, opportunities=opportunities, model=view.model
+        )
+        await self._core.update_brainstorm_session(session_id=session.id, status=BS_COMPLETE)
+        return dataclasses.replace(session, status=BS_COMPLETE)
+
+    async def _fail(self, session: BrainstormSession, reason: str) -> BrainstormSession:
+        await self._core.update_brainstorm_session(
+            session_id=session.id, status=BS_FAILED, failure_reason=reason
+        )
+        return dataclasses.replace(session, status=BS_FAILED, failure_reason=reason)

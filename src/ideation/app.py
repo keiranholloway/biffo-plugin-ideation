@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpError, CoreHttpGateway
-from .brainstorm_definitions import QUALIFIER_MAX_TURNS
+from .brainstorm_definitions import QUALIFIER_MAX_TURNS, brainstorm_seed_payloads
 from .definitions import MAX_TURNS, MIN_TURNS
 from .effective_config import builtin_chat_agents
 from .manifest import manifest_required_group
@@ -98,7 +98,9 @@ async def _seed_agent_config() -> None:
     try:
         transport = CoreTransport(founder_token="")
         gateway = CoreHttpGateway(transport)
-        result = await gateway.seed_own_config(config=builtin_chat_agents())
+        result = await gateway.seed_own_config(
+            config=[*builtin_chat_agents(), *brainstorm_seed_payloads()]
+        )
         created = sum(1 for r in result if r.get("created"))
         already_present = len(result) - created
         _LOGGER.info(
