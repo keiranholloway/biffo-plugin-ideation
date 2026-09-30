@@ -182,7 +182,11 @@ class TestEffectiveConfigRoute:
 
         assert resp.status_code == 200
         agents = resp.json()["agents"]
-        assert [a["agent_key"] for a in agents] == [CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME]
+        assert [a["agent_key"] for a in agents] == [
+            CHALLENGER_AGENT_NAME,
+            ANALYST_AGENT_NAME,
+            "ideation-brainstorm-qualifier",
+        ]
         # The real prompt text, not a placeholder: an admin about to override a
         # default has to be able to see what they are replacing.
         assert agents[0]["system_prompt"] == CHALLENGER_INSTRUCTIONS
@@ -238,7 +242,7 @@ class TestEffectiveConfigRoute:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert len(body["agents"]) == 2  # the constants are still answered with no hop
+        assert len(body["agents"]) == 3  # the constants are still answered with no hop
         assert [m["source"] for m in body["models"]] == ["unknown", "unknown"]
 
     def test_an_empty_table_is_not_reported_as_the_built_in_chat_model(
