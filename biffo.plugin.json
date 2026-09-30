@@ -207,6 +207,226 @@
       }
     },
     {
+      "name": "brainstorm_sessions",
+      "columns": [
+        {
+          "name": "owner_sub",
+          "type": "String(64)",
+          "nullable": false,
+          "description": "Cognito sub of the founder who owns this Brain-Storming session \u2014 the owner-scope column for service access (ADR-0017 \u00a75). All reads/writes go through Core's owner-scoped service routes; the table is NOT exposed via generic CRUD."
+        },
+        {
+          "name": "title",
+          "type": "String(200)",
+          "nullable": true,
+          "description": "Short human label, derived from the brief."
+        },
+        {
+          "name": "target",
+          "type": "Text",
+          "nullable": true,
+          "description": "The target company/industry the founder wants opportunities in."
+        },
+        {
+          "name": "geography",
+          "type": "Text",
+          "nullable": true,
+          "description": "The geographic market the founder is interested in."
+        },
+        {
+          "name": "problem",
+          "type": "Text",
+          "nullable": true,
+          "description": "The problem or idea the founder wants explored."
+        },
+        {
+          "name": "brief",
+          "type": "Text",
+          "nullable": true,
+          "description": "The qualified brief the research agents received, as a JSON object string. Text, not JSON: Core's plugin-table type map has no JSON type, and an unknown type silently falls back to String, which would truncate."
+        },
+        {
+          "name": "status",
+          "type": "String(20)",
+          "nullable": true,
+          "description": "qualifying | researching | synthesising | complete | failed. Nullable because the generated migration DDL does not apply declared defaults (only the in-process model) \u2014 the service sets it explicitly on create."
+        },
+        {
+          "name": "thread_id",
+          "type": "String(36)",
+          "nullable": true,
+          "description": "The agent-run thread that carries the qualifying chat transcript."
+        },
+        {
+          "name": "turn_count",
+          "type": "Integer",
+          "nullable": true,
+          "description": "User turns taken so far in the qualifying chat."
+        },
+        {
+          "name": "chain_id",
+          "type": "String(36)",
+          "nullable": true,
+          "description": "The causation chain the research agent runs share (ADR-0014 \u00a78), passed as causation_id on each so the orchestration engine's agent_fan_in can find them as siblings. Also how this plugin finds the synthesis run the engine creates. Null until research starts."
+        },
+        {
+          "name": "research_run_ids",
+          "type": "Text",
+          "nullable": true,
+          "description": "The async agent-runtime run ids of the parallel research agents, as a JSON array string. Text for the same no-JSON-type reason as brief."
+        },
+        {
+          "name": "synthesis_run_id",
+          "type": "String(36)",
+          "nullable": true,
+          "description": "The async run that reconciled the research findings into ranked opportunities. Set when the research fan-in completes."
+        },
+        {
+          "name": "failure_reason",
+          "type": "Text",
+          "nullable": true,
+          "description": "Why a failed session failed, in terms a founder can read. Null unless status is failed."
+        },
+        {
+          "name": "deleted",
+          "type": "Boolean",
+          "nullable": true,
+          "description": "Soft-delete flag. True means the founder removed this session; the row is never destroyed, just excluded from list_brainstorm_sessions. Nullable for the same declared-default reason as status \u2014 treat NULL as false."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_brainstorm_sessions_owner",
+          "columns": [
+            "tenant_id",
+            "owner_sub"
+          ]
+        },
+        {
+          "name": "idx_brainstorm_sessions_chain",
+          "columns": [
+            "tenant_id",
+            "chain_id"
+          ]
+        }
+      ],
+      "permissions": {
+        "list": {
+          "allowed": false
+        },
+        "read": {
+          "allowed": false
+        },
+        "create": {
+          "allowed": false
+        },
+        "update": {
+          "allowed": false
+        },
+        "delete": {
+          "allowed": false
+        }
+      },
+      "owner_scoped_service": {
+        "owner_column": "owner_sub",
+        "allowed_principals": [
+          "system:ideation"
+        ]
+      }
+    },
+    {
+      "name": "brainstorm_opportunities",
+      "columns": [
+        {
+          "name": "owner_sub",
+          "type": "String(64)",
+          "nullable": false,
+          "description": "Cognito sub of the founder who owns this opportunity \u2014 denormalised from the session so opportunities are owner-scoped uniformly, without a join (ADR-0017 \u00a75)."
+        },
+        {
+          "name": "session_id",
+          "type": "String(36)",
+          "nullable": false,
+          "description": "The brainstorm_sessions row that produced this opportunity."
+        },
+        {
+          "name": "rank",
+          "type": "Integer",
+          "nullable": false,
+          "description": "1-based position in the synthesis agent's ranking. Stored rather than derived so the founder always sees the order the agent argued for."
+        },
+        {
+          "name": "title",
+          "type": "String(200)",
+          "nullable": false,
+          "description": "Short name for the opportunity."
+        },
+        {
+          "name": "pitch",
+          "type": "Text",
+          "nullable": false,
+          "description": "The opportunity itself, in a few sentences. Carried into a Pressure Test session as the seed idea when the founder picks it."
+        },
+        {
+          "name": "rationale",
+          "type": "Text",
+          "nullable": true,
+          "description": "Why the synthesis agent ranked it here, reconciling the research findings."
+        },
+        {
+          "name": "evidence",
+          "type": "Text",
+          "nullable": true,
+          "description": "Supporting findings from the research agents, as a JSON string. Text for the no-JSON-type reason above."
+        },
+        {
+          "name": "model",
+          "type": "String(200)",
+          "nullable": true,
+          "description": "The model that produced this opportunity."
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_brainstorm_opportunities_session",
+          "columns": [
+            "tenant_id",
+            "session_id"
+          ]
+        },
+        {
+          "name": "idx_brainstorm_opportunities_owner",
+          "columns": [
+            "tenant_id",
+            "owner_sub"
+          ]
+        }
+      ],
+      "permissions": {
+        "list": {
+          "allowed": false
+        },
+        "read": {
+          "allowed": false
+        },
+        "create": {
+          "allowed": false
+        },
+        "update": {
+          "allowed": false
+        },
+        "delete": {
+          "allowed": false
+        }
+      },
+      "owner_scoped_service": {
+        "owner_column": "owner_sub",
+        "allowed_principals": [
+          "system:ideation"
+        ]
+      }
+    },
+    {
       "name": "ideation_model_catalog",
       "columns": [
         {

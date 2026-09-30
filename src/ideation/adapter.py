@@ -34,11 +34,22 @@ from typing import Any, Protocol
 
 from .definitions import CHALLENGER_AGENT_NAME
 from .json_text import parse_json_text
-from .models import GATHERING, Run, Session, TurnResult
+from .models import (
+    BS_QUALIFYING,
+    GATHERING,
+    AgentRunView,
+    BrainstormOpportunity,
+    BrainstormSession,
+    Run,
+    Session,
+    TurnResult,
+)
 
 _ROOT = "/api/v1/internal"
 _SESSIONS = f"{_ROOT}/owner-data/ideation_sessions"
 _REPORTS = f"{_ROOT}/owner-data/ideation_reports"
+_BS_SESSIONS = f"{_ROOT}/owner-data/brainstorm_sessions"
+_BS_OPPORTUNITIES = f"{_ROOT}/owner-data/brainstorm_opportunities"
 _AGENT_CHAT = f"{_ROOT}/agent-chat"
 _AGENT_RUNS = f"{_ROOT}/agent-runs"
 _IDEA_SUBMISSIONS = f"{_ROOT}/idea-submissions/mine"
@@ -85,6 +96,45 @@ def _session_from_row(row: dict[str, Any]) -> Session:
         # Rows created before this column existed have none — fall back to the
         # built-in seed challenger, matching what actually ran for them.
         challenger_agent_key=row.get("challenger_agent_key") or CHALLENGER_AGENT_NAME,
+    )
+
+
+def _json_or(value: Any, default: Any) -> Any:
+    return parse_json_text(value) if value else default
+
+
+def _brainstorm_session_from_row(row: dict[str, Any]) -> BrainstormSession:
+    return BrainstormSession(
+        id=row["id"],
+        owner_sub=row["owner_sub"],
+        status=row["status"],
+        title=row.get("title"),
+        target=row.get("target"),
+        geography=row.get("geography"),
+        problem=row.get("problem"),
+        brief=_json_or(row.get("brief"), None),
+        thread_id=row.get("thread_id"),
+        turn_count=row.get("turn_count") or 0,
+        chain_id=row.get("chain_id"),
+        research_run_ids=_json_or(row.get("research_run_ids"), []),
+        synthesis_run_id=row.get("synthesis_run_id"),
+        failure_reason=row.get("failure_reason"),
+        created_at=row.get("created_at"),
+        deleted=row.get("deleted") or False,
+    )
+
+
+def _opportunity_from_row(row: dict[str, Any]) -> BrainstormOpportunity:
+    return BrainstormOpportunity(
+        id=row["id"],
+        owner_sub=row["owner_sub"],
+        session_id=row["session_id"],
+        rank=row["rank"],
+        title=row["title"],
+        pitch=row["pitch"],
+        rationale=row.get("rationale"),
+        evidence=_json_or(row.get("evidence"), None),
+        model=row.get("model"),
     )
 
 
@@ -268,3 +318,140 @@ class CoreHttpGateway:
         except CoreNotFoundError:
             return None
         return row["idea"]
+
+    # ── Brain-Storming: fan-out primitives ───────────────────────────────────
+
+    async def request_agent_run(
+        self,
+        *,
+        agent_name: str,
+        definition: dict[str, Any],
+        output_tool: dict[str, Any],
+        input_payload: dict[str, Any],
+        causation_id: str,
+    ) -> str:
+        # No thread_id: the run's whole context is input_payload. The output tool
+        # rides on the definition snapshot as `output_tools` (a structured-output
+        # tool, not a registry lookup). causation_id makes parallel runs a *set*:
+        # without it each is its own chain root and the fan-in never sees siblings.
+        snapshot = {**definition, "output_tools": [output_tool]}
+        run = await self._t.request(
+            "POST",
+            _AGENT_RUNS,
+            json={
+                "agent_name": agent_name,
+                "definition_snapshot": snapshot,
+                "input_payload": input_payload,
+                "causation_id": causation_id,
+            },
+        )
+        return run["id"]
+
+    async def find_chain_run(self, *, chain_id: str, agent_name: str) -> AgentRunView | None:
+        # The chain listing returns summaries (no transcript), so fetch the full
+        # run once one is found.
+        rows = await self._t.request(
+            "GET", _AGENT_RUNS, params={"causation_id": chain_id, "agent_name": agent_name}
+        )
+        if not rows:
+            return None
+        return await self.get_agent_run(run_id=rows[0]["id"])
+
+    async def get_agent_run(self, *, run_id: str) -> AgentRunView | None:
+        try:
+            run = await self._t.request("GET", f"{_AGENT_RUNS}/{run_id}")
+        except CoreNotFoundError:
+            return None
+        result = run.get("result") or {}
+        model = result.get("model") or (run.get("definition_snapshot") or {}).get("model")
+        return AgentRunView(
+            id=run["id"],
+            status=run["status"],
+            messages=run.get("messages") or [],
+            model=model,
+            started_at=run.get("started_at"),
+        )
+
+    # ── Brain-Storming: sessions and opportunities ───────────────────────────
+
+    async def create_brainstorm_session(
+        self,
+        *,
+        owner_sub: str,
+        target: str | None,
+        geography: str | None,
+        problem: str | None,
+        thread_id: str,
+        title: str | None = None,
+    ) -> BrainstormSession:
+        # owner_sub is never sent: Core stamps it from the forwarded token. Every
+        # nullable column is written explicitly — the generated DDL applies no
+        # declared defaults (see create_session, #57).
+        row = await self._t.request(
+            "POST",
+            _BS_SESSIONS,
+            json={
+                "title": title,
+                "target": target,
+                "geography": geography,
+                "problem": problem,
+                "thread_id": thread_id,
+                "status": BS_QUALIFYING,
+                "turn_count": 0,
+                "deleted": False,
+            },
+        )
+        return _brainstorm_session_from_row(row)
+
+    async def get_brainstorm_session(
+        self, *, owner_sub: str, session_id: str
+    ) -> BrainstormSession | None:
+        try:
+            row = await self._t.request("GET", f"{_BS_SESSIONS}/{session_id}")
+        except CoreNotFoundError:
+            return None
+        return _brainstorm_session_from_row(row)
+
+    async def list_brainstorm_sessions(self, *, owner_sub: str) -> list[BrainstormSession]:
+        rows = await self._t.request("GET", _BS_SESSIONS)
+        sessions = [_brainstorm_session_from_row(row) for row in rows]
+        return [s for s in sessions if not s.deleted]
+
+    async def update_brainstorm_session(self, *, session_id: str, **fields: Any) -> None:
+        body = dict(fields)
+        # Text columns holding JSON (no JSON type in Core's plugin-table map).
+        for key in ("brief", "research_run_ids"):
+            if key in body and body[key] is not None:
+                body[key] = json.dumps(body[key])
+        await self._t.request("PATCH", f"{_BS_SESSIONS}/{session_id}", json=body)
+
+    async def delete_brainstorm_session(self, *, session_id: str) -> None:
+        await self._t.request("PATCH", f"{_BS_SESSIONS}/{session_id}", json={"deleted": True})
+
+    async def save_brainstorm_opportunities(
+        self, *, session_id: str, opportunities: list[dict[str, Any]], model: str | None
+    ) -> None:
+        # One POST per row: generic CRUD has no bulk create. Sequential, so a
+        # partial failure is easy to reason about.
+        for rank, opp in enumerate(opportunities, start=1):
+            evidence = opp.get("evidence")
+            await self._t.request(
+                "POST",
+                _BS_OPPORTUNITIES,
+                json={
+                    "session_id": session_id,
+                    "rank": rank,
+                    "title": opp["title"],
+                    "pitch": opp["pitch"],
+                    "rationale": opp.get("rationale"),
+                    "evidence": json.dumps(evidence) if evidence is not None else None,
+                    "model": model,
+                },
+            )
+
+    async def list_brainstorm_opportunities(
+        self, *, owner_sub: str, session_id: str
+    ) -> list[BrainstormOpportunity]:
+        rows = await self._t.request("GET", _BS_OPPORTUNITIES, params={"session_id": session_id})
+        opps = [_opportunity_from_row(row) for row in rows]
+        return sorted(opps, key=lambda o: o.rank)
