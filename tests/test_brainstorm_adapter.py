@@ -148,6 +148,7 @@ def test_get_agent_run_parses_model_and_started_at():
         },
     )
     view = _run(CoreHttpGateway(t).get_agent_run(run_id="r"))
+    assert view is not None
     assert view == AgentRunView(
         id="r", status="running", messages=[], model="snap", started_at="2026-01-01T00:00:00Z"
     )
@@ -159,10 +160,15 @@ def test_result_model_wins_over_snapshot_model():
     t.on(
         "GET",
         f"{_RUNS}/r",
-        {"id": "r", "status": "completed", "result": {"model": "real"},
-         "definition_snapshot": {"model": "snap"}},
+        {
+            "id": "r",
+            "status": "completed",
+            "result": {"model": "real"},
+            "definition_snapshot": {"model": "snap"},
+        },
     )
     view = _run(CoreHttpGateway(t).get_agent_run(run_id="r"))
+    assert view is not None
     assert view.model == "real"
 
 
@@ -185,8 +191,11 @@ def test_create_brainstorm_session_posts_without_owner_and_writes_defaults():
     t.on("POST", _BS, _row())
     s = _run(
         CoreHttpGateway(t).create_brainstorm_session(
-            owner_sub="alice", target="logistics", geography="UK",
-            problem="late deliveries", thread_id="th-1",
+            owner_sub="alice",
+            target="logistics",
+            geography="UK",
+            problem="late deliveries",
+            thread_id="th-1",
         )
     )
     body = t.call("POST", _BS)["json"]
@@ -219,6 +228,7 @@ def test_session_row_parses_json_text_columns():
         ),
     )
     s = _run(CoreHttpGateway(t).get_brainstorm_session(owner_sub="alice", session_id="bs-1"))
+    assert s is not None
     assert s.brief == {"target": "logistics"}
     assert s.research_run_ids == ["a", "b"]
     assert s.chain_id == "chain-1"
@@ -301,7 +311,9 @@ def test_list_opportunities_filters_by_session_and_sorts_by_rank():
             {**base, "id": "o1", "rank": 1, "title": "A", "evidence": json.dumps(["x"])},
         ],
     )
-    opps = _run(CoreHttpGateway(t).list_brainstorm_opportunities(owner_sub="alice", session_id="bs-1"))
+    opps = _run(
+        CoreHttpGateway(t).list_brainstorm_opportunities(owner_sub="alice", session_id="bs-1")
+    )
     assert t.call("GET", _OPPS)["params"] == {"session_id": "bs-1"}
     assert [o.id for o in opps] == ["o1", "o2"]
     assert isinstance(opps[0], BrainstormOpportunity)

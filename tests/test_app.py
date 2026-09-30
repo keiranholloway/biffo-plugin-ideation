@@ -62,6 +62,38 @@ class FakeCore:
         self._own_config: dict[str, dict[str, Any]] = {}
         self._active_agents: dict[str, list[dict[str, Any]]] = {}
 
+    # Brain-Storming port members. These ideation-chat tests never exercise them;
+    # they exist so this fake satisfies the full CoreGateway protocol.
+    async def request_agent_run(self, **_: Any) -> str:
+        raise NotImplementedError
+
+    async def find_chain_run(self, **_: Any) -> Any:
+        raise NotImplementedError
+
+    async def get_agent_run(self, **_: Any) -> Any:
+        raise NotImplementedError
+
+    async def create_brainstorm_session(self, **_: Any) -> Any:
+        raise NotImplementedError
+
+    async def get_brainstorm_session(self, **_: Any) -> Any:
+        raise NotImplementedError
+
+    async def list_brainstorm_sessions(self, **_: Any) -> Any:
+        raise NotImplementedError
+
+    async def update_brainstorm_session(self, **_: Any) -> None:
+        raise NotImplementedError
+
+    async def delete_brainstorm_session(self, **_: Any) -> None:
+        raise NotImplementedError
+
+    async def save_brainstorm_opportunities(self, **_: Any) -> None:
+        raise NotImplementedError
+
+    async def list_brainstorm_opportunities(self, **_: Any) -> Any:
+        raise NotImplementedError
+
     async def create_session(
         self, *, owner_sub, seed_idea, thread_id, challenger_agent_key
     ) -> Session:
