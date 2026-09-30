@@ -14,13 +14,6 @@ variable "plugin_name" {
   default     = "ideation"
 }
 
-# --- Frontend routing (ADR-0007 / ADR-0018 §2) -------------------------------
-
-variable "cdn_distribution_arn" {
-  description = "ARN of the shared CloudFront distribution — the only reader of the frontend bucket."
-  type        = string
-}
-
 variable "tags" {
   description = "Resource tags."
   type        = map(string)
