@@ -709,3 +709,13 @@ class TestSubmittedIdea:
         idea = asyncio.run(svc.get_submitted_idea(owner_sub="u"))
 
         assert idea is None
+
+
+def test_extract_report_deeply_nested_arguments_is_malformed() -> None:
+    from ideation.service import REPORT_TOOL_NAME, extract_report
+
+    messages = [
+        {"tool_calls": [{"function": {"name": REPORT_TOOL_NAME, "arguments": "[" * 100000}}]}
+    ]
+    with pytest.raises(MalformedReportError):
+        extract_report(messages)
