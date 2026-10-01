@@ -433,9 +433,13 @@ class BrainstormService:
             agent_name=QUALIFIER_AGENT_NAME,
             user_text=user_message,
         )
-        await self._core.update_brainstorm_session(
-            session_id=session_id, turn_count=session.turn_count + 1
-        )
+        # Persist the qualifier's latest reply as the session's brief — once the
+        # chat converges that reply IS the summarised brief, and research reads
+        # it from ``session.brief`` (finalise -> ``qualified_brief``).
+        fields: dict[str, Any] = {"turn_count": session.turn_count + 1}
+        if (result.reply or "").strip():
+            fields["brief"] = {"summary": result.reply.strip()}
+        await self._core.update_brainstorm_session(session_id=session_id, **fields)
         return result
 
     async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
