@@ -456,11 +456,17 @@ class BrainstormService:
             brief["qualified_brief"] = session.brief
 
         chain_id = str(uuid.uuid4())
-        research_run_ids: list[str] = []
+        # Resolve every config before firing any run, so a missing row cannot
+        # leave earlier agents' runs orphaned (and billed).
+        configs: dict[str, dict[str, Any]] = {}
         for agent_name in RESEARCH_AGENT_NAMES:
             config = await self._core.get_own_config(role=agent_name)
             if config is None:
                 raise AgentConfigMissingError(agent_name)
+            configs[agent_name] = config
+        research_run_ids: list[str] = []
+        for agent_name in RESEARCH_AGENT_NAMES:
+            config = configs[agent_name]
             research_run_ids.append(
                 await self._core.request_agent_run(
                     agent_name=agent_name,
