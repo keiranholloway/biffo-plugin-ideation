@@ -170,6 +170,7 @@ async def test_finalise_with_missing_config_raises_before_any_state_change() -> 
     with pytest.raises(AgentConfigMissingError):
         await _svc(core).finalise(owner_sub="alice", session_id="b1")
     assert core.sessions["b1"].status == BS_QUALIFYING
+    assert core.requests == []
 
 
 @_sync
