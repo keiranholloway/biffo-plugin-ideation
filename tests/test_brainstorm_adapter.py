@@ -322,20 +322,23 @@ def test_list_opportunities_filters_by_session_and_sorts_by_rank():
 
 
 def test_chat_turn_brief_round_trips_through_adapter():
+    from ideation.brainstorm_definitions import BriefState
     from ideation.models import TurnResult
     from ideation.service import BrainstormService
 
     t = FakeTransport()
     t.on("GET", f"{_BS}/bs-1", _row(id="bs-1", status="qualifying", thread_id="th", turn_count=0))
 
+    state = {"ready": True, "summary": "SMEs in the UK losing cash to late invoices"}
+
     class Core(CoreHttpGateway):
         async def run_chat_turn(self, **kw):
-            return TurnResult(reply="Qualified: SMEs, UK, cash flow")
+            return TurnResult(reply=f"Got it.\n<brief_state>{json.dumps(state)}</brief_state>")
 
     svc = BrainstormService(Core(t))
     _run(svc.chat_turn(owner_sub="alice", session_id="bs-1", user_message="x"))
     body = t.call("PATCH", f"{_BS}/bs-1")["json"]
-    expected = {"summary": "Qualified: SMEs, UK, cash flow"}
+    expected = BriefState.model_validate(state).model_dump()
     assert json.loads(body["brief"]) == expected
     t.on("GET", f"{_BS}/bs-1", _row(id="bs-1", brief=body["brief"]))
     session = _run(CoreHttpGateway(t).get_brainstorm_session(owner_sub="alice", session_id="bs-1"))

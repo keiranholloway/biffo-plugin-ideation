@@ -12,8 +12,11 @@ from biffo_plugin_sdk import ForwardedUser
 from fastapi.testclient import TestClient
 
 from ideation.app import app, get_brainstorm_service, require_founder
-from ideation.brainstorm_definitions import QUALIFIER_AGENT_NAME, QUALIFIER_INSTRUCTIONS
-from ideation.definitions import MAX_TURNS
+from ideation.brainstorm_definitions import (
+    QUALIFIER_AGENT_NAME,
+    QUALIFIER_INSTRUCTIONS,
+    QUALIFIER_MAX_TURNS,
+)
 from ideation.models import BS_QUALIFYING, BrainstormSession, TurnResult
 from ideation.service import BrainstormService
 
@@ -82,7 +85,7 @@ def test_start_session_runs_the_opening_qualifier_turn(client, core):
     assert body["reply"] == "question 1"
     assert body["status"] == BS_QUALIFYING
     assert body["turn_count"] == 1
-    assert body["max_turns"] == MAX_TURNS
+    assert body["max_turns"] == QUALIFIER_MAX_TURNS
     assert body["target"] == "dentists"
     assert core.turns[0]["agent_name"] == QUALIFIER_AGENT_NAME
     assert "dentists" in core.turns[0]["text"] and "UK" in core.turns[0]["text"]
@@ -95,7 +98,7 @@ def test_start_requires_some_input(client):
 
 def test_capped_qualifying_conversation(client, core):
     sid = client.post("/brainstorm/sessions", json={"problem": "admin"}).json()["session_id"]
-    for expected in range(2, MAX_TURNS + 1):
+    for expected in range(2, QUALIFIER_MAX_TURNS + 1):
         r = client.post(f"/brainstorm/sessions/{sid}/messages", json={"message": "answer"})
         assert r.status_code == 200, r.text
         assert r.json()["turn_count"] == expected
@@ -105,7 +108,7 @@ def test_capped_qualifying_conversation(client, core):
 
     over = client.post(f"/brainstorm/sessions/{sid}/messages", json={"message": "more"})
     assert over.status_code == 409
-    assert len(core.turns) == MAX_TURNS  # the capped turn never reached the agent
+    assert len(core.turns) == QUALIFIER_MAX_TURNS  # the capped turn never reached the agent
 
 
 def test_get_list_delete(client):
@@ -135,7 +138,7 @@ def test_no_research_launch_route(client):
 
 
 def test_qualifier_prompt_is_blue_sky_not_pressure_testing():
-    assert "NO fixed idea" in QUALIFIER_INSTRUCTIONS
+    assert "STEP ONE OF TWO" in QUALIFIER_INSTRUCTIONS
     assert "do NOT pressure-test" in QUALIFIER_INSTRUCTIONS
 
 

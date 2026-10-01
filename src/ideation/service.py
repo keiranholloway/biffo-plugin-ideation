@@ -28,7 +28,7 @@ from .brainstorm_definitions import (
     SYNTHESIS_AGENT_NAME,
     OpportunitySet,
     findings_tool_schema,
-    parse_completed_brief,
+    parse_brief_state,
     research_definition,
 )
 from .definitions import (
@@ -359,8 +359,7 @@ class BrainstormService:
     """The Brain-Storming qualifying chat — transport-agnostic, like
     :class:`IdeationService`. Sessions start in ``qualifying``; each turn is a
     buffered chat turn with the qualifier agent, capped at
-    ``QUALIFIER_MAX_TURNS``. When the qualifier signals a finished A/B/C brief the
-    brief is saved and research starts automatically."""
+    its own safety ceiling ``QUALIFIER_MAX_TURNS`` (not Pressure Test's)."""
 
     def __init__(self, core: CoreGateway, *, max_turns: int = QUALIFIER_MAX_TURNS) -> None:
         self._core = core
@@ -435,25 +434,15 @@ class BrainstormService:
             agent_name=QUALIFIER_AGENT_NAME,
             user_text=user_message,
         )
-        visible, completed = parse_completed_brief(result.reply)
+        # The readiness signal is the structured block, parsed and validated —
+        # never the prose. The latest valid block wins; an absent or malformed one
+        # leaves the previous brief untouched. The block is hidden from the founder.
+        visible, state = parse_brief_state(result.reply)
         fields: dict[str, Any] = {"turn_count": session.turn_count + 1}
-        if completed is not None:
-            # Converged: save the structured A/B/C brief, then hand off to research.
-            fields.update(
-                brief={"summary": visible, **completed},
-                target=completed["A"],
-                geography=completed["B"],
-                problem=completed["C"],
-            )
-        elif visible:
-            # Otherwise keep the latest reply as a running summary so research
-            # (finalise -> ``qualified_brief``) never ignores the conversation.
-            fields["brief"] = {"summary": visible}
+        if state is not None:
+            fields["brief"] = state.model_dump()
         await self._core.update_brainstorm_session(session_id=session_id, **fields)
-        result = dataclasses.replace(result, reply=visible)
-        if completed is not None:
-            await self.finalise(owner_sub=owner_sub, session_id=session_id)
-        return result
+        return dataclasses.replace(result, reply=visible)
 
     async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
         await self._load_owned(owner_sub=owner_sub, session_id=session_id)

@@ -43,7 +43,9 @@ describe('BrainStorm research flow', () => {
   it('finalises, polls to completion, lists opportunities and hands off', async () => {
     const opp = { id: 'o1', rank: 1, title: 'Slot filler', pitch: 'Fill no-shows', rationale: 'why', evidence: [] }
     const api = {
-      startBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'qualifying', reply: 'Q?' }),
+      startBrainstorm: vi
+        .fn()
+        .mockResolvedValue({ ...state, status: 'qualifying', ready: true, reply: 'Q?' }),
       finaliseBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'researching' }),
       getBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'complete' }),
       getBrainstormOpportunities: vi.fn().mockResolvedValue({ opportunities: [opp] }),
@@ -54,7 +56,7 @@ describe('BrainStorm research flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Start brain-storm/ }))
     await waitFor(() => expect(screen.getByText('Q?')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Generate opportunities' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run research' }))
     await waitFor(() => expect(screen.getByText(/Researching/)).toBeInTheDocument())
     expect(api.finaliseBrainstorm).toHaveBeenCalledWith('s1')
 
@@ -64,32 +66,45 @@ describe('BrainStorm research flow', () => {
   }, 10000)
 })
 
-describe('BrainStorm handoff', () => {
-  it('shows the A/B/C brief and research progress when the chat converges', async () => {
-    const brief = { A: 'dentists', B: 'UK', C: 'no-shows', summary: 'Dentists in the UK.' }
+
+describe('BrainStorm "Run research" call to action', () => {
+  async function startWith(extra: Record<string, unknown>) {
     const api = {
-      startBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'qualifying', reply: 'Q?' }),
-      sendBrainstormMessage: vi.fn().mockResolvedValue({
-        ...state,
-        status: 'researching',
-        brief,
-        reply: 'Dentists in the UK. Research starts now.',
-      }),
-      getBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'researching', brief }),
+      startBrainstorm: vi
+        .fn()
+        .mockResolvedValue({ ...state, status: 'qualifying', reply: 'Q?', ...extra }),
     } as unknown as Api
     render(<BrainStorm api={api} />)
-    fireEvent.change(screen.getByLabelText('Target company or industry'), { target: { value: 'x' } })
+    fireEvent.change(screen.getByLabelText('Target company or industry'), { target: { value: 'clinics' } })
     fireEvent.click(screen.getByRole('button', { name: /Start brain-storm/ }))
     await waitFor(() => expect(screen.getByText('Q?')).toBeInTheDocument())
+  }
 
-    fireEvent.change(screen.getByLabelText('Your reply'), { target: { value: 'no-shows' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+  it('is hidden before the brief is ready', async () => {
+    await startWith({ ready: false, at_ceiling: false })
+    expect(screen.queryByRole('button', { name: 'Run research' })).toBeNull()
+    expect(screen.queryByText('Generate opportunities')).toBeNull()
+  })
 
-    await waitFor(() => expect(screen.getByText(/Brief complete/)).toBeInTheDocument())
-    expect(screen.getByText('dentists')).toBeInTheDocument()
-    expect(screen.getByText('UK')).toBeInTheDocument()
-    expect(screen.getByText('no-shows')).toBeInTheDocument()
-    expect(screen.getByText(/Researching/)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Your reply')).not.toBeInTheDocument()
+  it('is shown with the brief summary once ready', async () => {
+    await startWith({
+      ready: true,
+      brief: { ready: true, summary: 'Clinics losing money to no-shows', business_problem: 'No-shows' },
+    })
+    expect(screen.getByRole('button', { name: 'Run research' })).toBeInTheDocument()
+    expect(screen.getByText('Clinics losing money to no-shows')).toBeInTheDocument()
+    expect(screen.getByText('No-shows')).toBeInTheDocument()
+  })
+
+  it('is shown with the gaps at the ceiling even when not ready', async () => {
+    await startWith({
+      ready: false,
+      at_ceiling: true,
+      turn_count: 18,
+      max_turns: 18,
+      gaps: ['Budget unknown'],
+    })
+    expect(screen.getByRole('button', { name: 'Run research' })).toBeInTheDocument()
+    expect(screen.getByText('Budget unknown')).toBeInTheDocument()
   })
 })
