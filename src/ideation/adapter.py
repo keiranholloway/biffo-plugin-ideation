@@ -309,12 +309,16 @@ class CoreHttpGateway:
         rows = await self._t.request("POST", f"{_PLUGIN_CONFIG}/seed", json=config)  # type: ignore[arg-type]
         return list(rows)
 
-    async def seed_own_workflows(self, *, definitions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def seed_own_workflows(
+        self, *, definitions: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Declare this plugin's own workflow definitions. SigV4-only and scoped
         to this plugin's identity. An UPSERT keyed by ``definition_key`` (unlike
         the config seed), so the stored definition always matches this build."""
         rows = await self._t.request(
-            "POST", f"{_PLUGIN_WORKFLOWS}/seed", json=definitions  # type: ignore[arg-type]
+            "POST",
+            f"{_PLUGIN_WORKFLOWS}/seed",
+            json=definitions,  # type: ignore[arg-type]
         )
         return list(rows)
 

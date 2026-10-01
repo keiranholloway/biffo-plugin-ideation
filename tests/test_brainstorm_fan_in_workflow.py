@@ -7,13 +7,20 @@ this definition are asserted rather than trusted.
 
 from __future__ import annotations
 
+import asyncio
+import importlib
+
+import pytest
+
 from ideation.brainstorm_definitions import (
     FAN_IN_DEFINITION_KEY,
-    WORKFLOW_NAME,
-    brainstorm_fan_in_definition as definition,
-    brainstorm_workflow_definitions,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
+    WORKFLOW_NAME,
+    brainstorm_workflow_definitions,
+)
+from ideation.brainstorm_definitions import (
+    brainstorm_fan_in_definition as definition,
 )
 
 
@@ -73,12 +80,6 @@ def test_it_is_enabled_and_named_stably():
     assert payload["definition_key"] == FAN_IN_DEFINITION_KEY == "ideation-brainstorm-fan-in"
 
 
-import asyncio
-import importlib
-
-import pytest
-
-
 class _StubTransport:
     def __init__(self, *, founder_token: str = "") -> None:
         pass
@@ -108,6 +109,7 @@ def test_startup_posts_fan_in_definition_and_is_idempotent(monkeypatch, module_n
     method, path, body = posts[0]
     assert (method, path) == ("POST", "/api/v1/internal/plugins/me/workflows/seed")
     assert body == brainstorm_workflow_definitions()
+    assert isinstance(body, list)
     assert body[0]["definition_key"] == FAN_IN_DEFINITION_KEY
     assert posts[1] == posts[0]
 
