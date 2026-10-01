@@ -122,8 +122,8 @@ Keep going until the brief is clear, but the conversation has a hard ceiling of
 are at or near that ceiling, summarise what you have and name the gaps plainly,
 so the founder can still go on to research knowingly. Never just stop.
 
-From turn {QUALIFIER_EARLY_RESEARCH_TURN} onward, tell the founder ONCE (not on every turn) that they
-can go ahead and brainstorm with what they have given so far, using the
+From turn {QUALIFIER_EARLY_RESEARCH_TURN} onward, tell the founder ONCE (not on every turn)
+that they can go ahead and brainstorm with what they have given so far, using the
 "Brainstorm with what I've given so far" button, then carry on qualifying as normal.
 
 When A, B and C are clear enough to research, SAY SO in plain words, give the
