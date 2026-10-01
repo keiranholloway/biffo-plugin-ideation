@@ -183,6 +183,8 @@ MAX_OPPORTUNITIES = 10
 
 RESEARCH_MAX_TURNS = 8
 SYNTHESIS_MAX_TURNS = 3
+#: Wall-clock bound on the synthesis run, matching Idea Scout's proven fan-in.
+SYNTHESIS_TIMEOUT_SECONDS = 240
 
 DEFAULT_RESEARCH_MODEL = "anthropic/claude-sonnet-4:online"
 DEFAULT_SYNTHESIS_MODEL = "anthropic/claude-opus-4.8"
@@ -468,6 +470,11 @@ def brainstorm_fan_in_definition() -> dict:
             "expect_agents": ",".join(RESEARCH_AGENT_NAMES),
             "agent_name": SYNTHESIS_AGENT_NAME,
             "max_turns": SYNTHESIS_MAX_TURNS,
+            "timeout_seconds": SYNTHESIS_TIMEOUT_SECONDS,
+            # The engine builds the synthesis run's definition from this config,
+            # so this is the only place its output tool can come from. Without it
+            # the model answers in prose and extract_opportunities finds nothing.
+            "output_tools": [opportunities_tool_schema()],
         },
         "enabled": True,
     }
