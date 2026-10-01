@@ -1138,7 +1138,8 @@ describe('App ?seed= deep-link', () => {
     window.history.replaceState({}, '', `/api/v1/plugins/ideation/ui/${search}`)
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
     mockFetch(200, [])
-    await renderPressureTest()
+    // No tab click: a ?seed= visit must land on Pressure Test by itself.
+    render(<App />)
     return await screen.findByLabelText('Your idea')
   }
 
@@ -1149,7 +1150,11 @@ describe('App ?seed= deep-link', () => {
   })
 
   it('leaves the seed box empty when there is no ?seed=', async () => {
-    const box = await renderWithUrl('')
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/')
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    mockFetch(200, [])
+    await renderPressureTest()
+    const box = await screen.findByLabelText('Your idea')
 
     expect(box).toHaveValue('')
   })
@@ -1173,7 +1178,7 @@ describe('App ?seed= deep-link', () => {
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
     window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/?seed=an%20idea')
 
-    await renderPressureTest()
+    render(<App />)
     await screen.findByLabelText('Your idea')
 
     // startSession is the only POST this view can make.
