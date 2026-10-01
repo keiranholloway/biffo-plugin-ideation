@@ -15,7 +15,11 @@ from ideation.definitions import (
     CHALLENGER_INSTRUCTIONS,
 )
 from ideation.manifest import manifest_required_group
-from scripts.seed_chat_agents import build_analyst_payload, build_payload
+from scripts.seed_chat_agents import (
+    build_analyst_payload,
+    build_payload,
+    build_qualifier_payload,
+)
 
 #: What the seeded rows must demand. Read from the manifest, not named here:
 #: these assertions used to pin the literal ``"founder"`` *as correct*, which is
@@ -56,3 +60,10 @@ def test_the_seeded_group_is_the_group_the_manifest_admits() -> None:
     assert _REQUIRED_GROUP == "admin"  # owner decision B, biffo-platform-app#70
     for payload in (build_payload(), build_analyst_payload()):
         assert payload["required_group"] == "admin", payload["agent_key"]
+
+
+def test_qualifier_seed_payload_is_the_brainstorm_qualifier_row() -> None:
+    payload = build_qualifier_payload()
+    assert payload["agent_key"] == "ideation-brainstorm-qualifier"
+    assert payload["role"] == "qualifier"
+    assert payload["required_group"] == _REQUIRED_GROUP

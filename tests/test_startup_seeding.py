@@ -128,8 +128,11 @@ class TestBothAppsSeedAtStartup:
         # independently-built copy that could drift from it.
         assert sent == [*builtin_chat_agents(), *brainstorm_seed_payloads()]
         keys = {row["agent_key"] for row in sent}
-        assert {CHALLENGER_AGENT_NAME, ANALYST_AGENT_NAME} <= keys
-        assert len(sent) == 10  # challenger + analyst + the eight Brain-Storming roles
+        assert {
+            CHALLENGER_AGENT_NAME,
+            ANALYST_AGENT_NAME,
+            "ideation-brainstorm-qualifier",
+        } <= keys
 
     @pytest.mark.parametrize("module_name", ["ideation.app", "ideation.admin_app"])
     def test_a_transient_core_failure_at_startup_is_logged_not_raised(
@@ -213,7 +216,7 @@ class TestSeedingNeverOverwrites:
         payload = builtin_chat_agents()
 
         first = _run(gateway.seed_own_config(config=payload))
-        assert [r["created"] for r in first] == [True, True]
+        assert [r["created"] for r in first] == [True, True, True]
         assert table[CHALLENGER_AGENT_NAME]["system_prompt"] == payload[0]["system_prompt"]
 
         # An admin edits the challenger's stored prompt directly (what the
@@ -224,7 +227,7 @@ class TestSeedingNeverOverwrites:
         # The next cold start seeds again, from the *same* built-in payload.
         second = _run(gateway.seed_own_config(config=payload))
 
-        assert [r["created"] for r in second] == [False, False]
+        assert [r["created"] for r in second] == [False, False, False]
         # The admin's edit survived the re-seed — this is the whole point.
         assert table[CHALLENGER_AGENT_NAME]["system_prompt"] == edited_prompt
 
@@ -246,3 +249,16 @@ class TestSeedingNeverOverwrites:
             "confirming the guard in _InsertIfAbsentGateway above is what "
             "prevents this, not an accident of the test data"
         )
+
+
+def test_seed_payload_includes_the_brainstorm_qualifier() -> None:
+    from ideation.brainstorm_definitions import (
+        QUALIFIER_AGENT_NAME,
+        QUALIFIER_INSTRUCTIONS,
+    )
+
+    payload = {row["agent_key"]: row for row in builtin_chat_agents()}
+    row = payload[QUALIFIER_AGENT_NAME]
+    assert row["system_prompt"] == QUALIFIER_INSTRUCTIONS
+    assert row["role"] == "qualifier"
+    assert row["required_group"] == payload[CHALLENGER_AGENT_NAME]["required_group"]
