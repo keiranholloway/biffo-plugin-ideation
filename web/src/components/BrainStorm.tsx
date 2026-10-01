@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import { ChatComposer } from './ChatComposer'
 import { ApiError, type Api, type BrainstormOpportunity, type BrainstormState } from '../lib/api'
 
 interface Msg {
@@ -251,18 +252,14 @@ export function BrainStorm({
               </li>
             ))}
           </ul>
-          <div className="ide-compose">
-            <input
-              aria-label="Your reply"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void send()}
-              placeholder="Answer…"
-              disabled={busy || session.turn_count >= session.max_turns}
-            />
-            <button onClick={() => void send()} disabled={busy || !input.trim()}>
-              Send
-            </button>
+          <ChatComposer
+            label="Your reply"
+            value={input}
+            onChange={setInput}
+            onSend={() => void send()}
+            busy={busy}
+            capped={session.turn_count >= session.max_turns}
+          >
             <button type="button" onClick={() => void generate()} disabled={busy}>
               Generate opportunities
             </button>
@@ -272,7 +269,7 @@ export function BrainStorm({
             <span className="ide-turns">
               turn {session.turn_count} / {session.max_turns}
             </span>
-          </div>
+          </ChatComposer>
         </div>
       )}
     </section>

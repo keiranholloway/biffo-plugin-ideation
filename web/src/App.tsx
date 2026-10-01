@@ -6,6 +6,7 @@ import { isFounder, REQUIRED_GROUP } from './lib/roles'
 import { ReportCard } from './components/ReportCard'
 import { Sidebar } from './components/Sidebar'
 import { BrainStorm } from './components/BrainStorm'
+import { ChatComposer } from './components/ChatComposer'
 
 interface Msg {
   role: 'you' | 'ideation'
@@ -395,18 +396,14 @@ export default function App() {
             </ul>
 
             {session.status === 'gathering' && (
-              <div className="ide-compose">
-                <input
-                  aria-label="Your answer"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void send()}
-                  placeholder="Answer…"
-                  disabled={busy || session.turn_count >= session.max_turns}
-                />
-                <button onClick={() => void send()} disabled={busy || !input.trim()}>
-                  Send
-                </button>
+              <ChatComposer
+                label="Your answer"
+                value={input}
+                onChange={setInput}
+                onSend={() => void send()}
+                busy={busy}
+                capped={session.turn_count >= session.max_turns}
+              >
                 <button
                   className="ide-finalise"
                   onClick={() => void finalise()}
@@ -418,7 +415,7 @@ export default function App() {
                 <span className="ide-turns">
                   turn {session.turn_count} / {session.max_turns}
                 </span>
-              </div>
+              </ChatComposer>
             )}
 
             {session.status === 'analysing' && (

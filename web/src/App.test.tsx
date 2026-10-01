@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
 import App from './App'
+import { COMPOSER_PLACEHOLDER } from './components/ChatComposer'
 import * as auth from './lib/auth'
 import type { CognitoUserSession } from 'amazon-cognito-identity-js'
 
@@ -151,7 +152,7 @@ describe('App', () => {
     })
 
     // Ensure the chat UI is not visible
-    expect(screen.queryByPlaceholderText('Answer…')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(COMPOSER_PLACEHOLDER)).not.toBeInTheDocument()
     expect(screen.queryByText('Send')).not.toBeInTheDocument()
   })
 
@@ -197,7 +198,7 @@ describe('App', () => {
     screen.getByText('In progress').click()
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
       expect(screen.getByText('Send')).toBeInTheDocument()
     })
   })
@@ -461,7 +462,7 @@ describe('App', () => {
     screen.getByText('In progress').click()
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
     })
 
     expect(screen.queryByText('Old summary')).not.toBeInTheDocument()
@@ -871,7 +872,7 @@ describe('App', () => {
     screen.getByText('In progress').click()
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
     })
 
     // Delete the completed session (different one)
@@ -879,7 +880,7 @@ describe('App', () => {
     deleteButtons[0].click() // First delete button is for 'Completed'
 
     // Verify the live chat view is still visible
-    expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
   })
 })
 
