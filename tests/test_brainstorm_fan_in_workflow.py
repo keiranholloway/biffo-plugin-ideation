@@ -14,10 +14,13 @@ import pytest
 
 from ideation.brainstorm_definitions import (
     FAN_IN_DEFINITION_KEY,
+    OPPORTUNITIES_TOOL_NAME,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
+    SYNTHESIS_TIMEOUT_SECONDS,
     WORKFLOW_NAME,
     brainstorm_workflow_definitions,
+    opportunities_tool_schema,
 )
 from ideation.brainstorm_definitions import (
     brainstorm_fan_in_definition as definition,
@@ -53,6 +56,23 @@ def test_it_does_not_carry_the_synthesis_prompt_or_model():
 
     assert "instructions" not in config
     assert "model" not in config
+
+
+def test_it_offers_synthesis_the_output_tool_the_plugin_parses():
+    """Core builds the synthesis run's definition from this action_config, so the
+    output tool must be here. Without it the model answers in prose,
+    extract_opportunities finds no tool call, and every session ends `failed`
+    ("returned nothing usable") after all six research agents have run and billed."""
+    config = definition()["action_config"]
+
+    assert config["output_tools"] == [opportunities_tool_schema()]
+    assert config["output_tools"][0]["function"]["name"] == OPPORTUNITIES_TOOL_NAME
+
+
+def test_it_bounds_the_synthesis_run_time():
+    config = definition()["action_config"]
+
+    assert config["timeout_seconds"] == SYNTHESIS_TIMEOUT_SECONDS > 0
 
 
 def test_it_carries_max_turns():
