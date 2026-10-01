@@ -184,6 +184,7 @@ async def test_still_researching_stays_put() -> None:
 async def test_synthesis_run_discovered_advances_to_synthesising() -> None:
     core = FakeCore()
     session = await _researching(core)
+    assert session.chain_id is not None
     core.chain_runs[(session.chain_id, SYNTHESIS_AGENT_NAME)] = AgentRunView(
         id="syn", status="running", started_at="t"
     )
@@ -315,3 +316,32 @@ def test_eight_seed_roles_with_online_research_models() -> None:
     for name in RESEARCH_AGENT_NAMES:
         assert by[name]["model"].endswith(":online")
     assert not by[SYNTHESIS_AGENT_NAME]["model"].endswith(":online")
+
+
+def test_extract_opportunities_skips_unparseable_arguments_and_keeps_earlier_valid_call() -> None:
+    from ideation.service import extract_opportunities
+
+    messages = _opps_messages()
+    messages.append(
+        {"tool_calls": [{"function": {"name": OPPORTUNITIES_TOOL_NAME, "arguments": "{not json"}}]}
+    )
+    assert len(extract_opportunities(messages).opportunities) == 3
+
+
+def test_extract_opportunities_rejects_an_invalid_shortlist() -> None:
+    from ideation.service import MalformedOpportunitiesError, extract_opportunities
+
+    messages = [
+        {
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": OPPORTUNITIES_TOOL_NAME,
+                        "arguments": {"opportunities": "nope"},
+                    }
+                }
+            ]
+        }
+    ]
+    with pytest.raises(MalformedOpportunitiesError):
+        extract_opportunities(messages)

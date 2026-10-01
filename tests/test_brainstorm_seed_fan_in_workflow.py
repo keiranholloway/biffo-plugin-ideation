@@ -95,3 +95,30 @@ def test_it_posts_to_the_path_core_actually_mounts():
     """
     assert _seed._DEFINITIONS_PATH == "/api/v1/orchestration/workflows"
     assert "/admin/" not in _seed._DEFINITIONS_PATH
+
+
+def _run_main(monkeypatch, capsys, fail_on: str, argv: list[str] | None = None):
+    import urllib.error
+
+    monkeypatch.setenv("CORE_API_URL", "http://core")
+    monkeypatch.setenv("ADMIN_BEARER_TOKEN", "t")
+    monkeypatch.setattr("sys.argv", ["seed", *(argv or [])])
+
+    def fake_request(method, url, token, body=None):
+        if method == fail_on:
+            raise urllib.error.HTTPError(url, 500, "boom", {}, None)  # type: ignore[arg-type]
+        return [{"id": "w1", "name": WORKFLOW_NAME}] if method == "GET" else {"id": "n"}
+
+    monkeypatch.setattr(_seed, "_request", fake_request)
+    rc = _seed.main()
+    return rc, capsys.readouterr().err
+
+
+def test_main_reports_failure_to_list_workflows(monkeypatch, capsys):
+    rc, err = _run_main(monkeypatch, capsys, "GET")
+    assert rc == 1 and "Could not list workflows" in err
+
+
+def test_main_reports_failure_to_replace_workflow(monkeypatch, capsys):
+    rc, err = _run_main(monkeypatch, capsys, "PUT", ["--replace"])
+    assert rc == 1 and "Failed: 500" in err
