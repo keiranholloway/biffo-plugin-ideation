@@ -6,6 +6,7 @@ import { isFounder, REQUIRED_GROUP } from './lib/roles'
 import { ReportCard } from './components/ReportCard'
 import { Sidebar } from './components/Sidebar'
 import { BrainStorm } from './components/BrainStorm'
+import { ChatComposer } from './components/ChatComposer'
 
 interface Msg {
   role: 'you' | 'ideation'
@@ -40,8 +41,8 @@ function readSeedParam(): string {
 
 function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'pressure-test', label: 'Pressure Test' },
     { id: 'brain-storm', label: 'Brain-Storm' },
+    { id: 'pressure-test', label: 'Pressure Test' },
   ]
   return (
     <div role="tablist" className="ide-tabs">
@@ -68,11 +69,13 @@ export default function App() {
   // out" (which redirects to the portal login) — re-authenticating would not
   // help, so say so instead of bouncing them round a loop.
   const [notPermitted, setNotPermitted] = useState(false)
-  const [tab, setTab] = useState<Tab>('pressure-test')
-  const [view, setView] = useState<View>({ kind: 'new' })
   // Lazy initialiser: read once, at mount. After this the box belongs to the
   // founder — editing or clearing it is never overwritten by the param.
   const [seed, setSeed] = useState(readSeedParam)
+  // Brain-Storm is the default landing tab; a ?seed= deep-link lands on
+  // Pressure Test, pre-filled.
+  const [tab, setTab] = useState<Tab>(() => (seed ? 'pressure-test' : 'brain-storm'))
+  const [view, setView] = useState<View>({ kind: 'new' })
   const [session, setSession] = useState<SessionState | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -393,18 +396,14 @@ export default function App() {
             </ul>
 
             {session.status === 'gathering' && (
-              <div className="ide-compose">
-                <input
-                  aria-label="Your answer"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void send()}
-                  placeholder="Answer…"
-                  disabled={busy || session.turn_count >= session.max_turns}
-                />
-                <button onClick={() => void send()} disabled={busy || !input.trim()}>
-                  Send
-                </button>
+              <ChatComposer
+                label="Your answer"
+                value={input}
+                onChange={setInput}
+                onSend={() => void send()}
+                busy={busy}
+                capped={session.turn_count >= session.max_turns}
+              >
                 <button
                   className="ide-finalise"
                   onClick={() => void finalise()}
@@ -416,7 +415,7 @@ export default function App() {
                 <span className="ide-turns">
                   turn {session.turn_count} / {session.max_turns}
                 </span>
-              </div>
+              </ChatComposer>
             )}
 
             {session.status === 'analysing' && (

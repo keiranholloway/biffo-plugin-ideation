@@ -63,7 +63,9 @@ class FakeCore:
     async def get_own_config(self, *, role):
         return self.configs.get(role)
 
-    async def request_agent_run(self, *, agent_name, definition, output_tool, input_payload, causation_id):
+    async def request_agent_run(
+        self, *, agent_name, definition, output_tool, input_payload, causation_id
+    ):
         self.requests.append({"agent_name": agent_name, "input_payload": input_payload})
         return f"r{len(self.requests)}"
 

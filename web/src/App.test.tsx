@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
 import App from './App'
+import { COMPOSER_PLACEHOLDER } from './components/ChatComposer'
 import * as auth from './lib/auth'
 import type { CognitoUserSession } from 'amazon-cognito-identity-js'
 
@@ -26,6 +27,13 @@ function mockFetch(status: number, body: unknown) {
 function createMockSession(groups: unknown = ['admin'], jwt = 'test-token') {
   const idToken = { getJwtToken: () => jwt, payload: { 'cognito:groups': groups } }
   return { getIdToken: () => idToken } as unknown as CognitoUserSession
+}
+
+// Brain-Storm is the default landing tab; most tests here exercise Pressure
+// Test, so open it explicitly the way a founder would.
+async function renderPressureTest() {
+  render(<App />)
+  fireEvent.click(await screen.findByRole('tab', { name: 'Pressure Test' }))
 }
 
 describe('App', () => {
@@ -54,7 +62,7 @@ describe('App', () => {
       return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' } as Response
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     // The list has not answered yet, so the sidebar must not speak for it.
     await waitFor(() => expect(screen.getByText(/Loading your past runs/)).toBeInTheDocument())
@@ -75,7 +83,7 @@ describe('App', () => {
     ]
     mockFetch(200, sessionList)
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('First idea')).toBeInTheDocument()
@@ -130,7 +138,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${url}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('Completed')).toBeInTheDocument()
@@ -144,7 +152,7 @@ describe('App', () => {
     })
 
     // Ensure the chat UI is not visible
-    expect(screen.queryByPlaceholderText('Answer…')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(COMPOSER_PLACEHOLDER)).not.toBeInTheDocument()
     expect(screen.queryByText('Send')).not.toBeInTheDocument()
   })
 
@@ -181,7 +189,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${url}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('In progress')).toBeInTheDocument()
@@ -190,7 +198,7 @@ describe('App', () => {
     screen.getByText('In progress').click()
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
       expect(screen.getByText('Send')).toBeInTheDocument()
     })
   })
@@ -242,7 +250,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${url}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('Old idea')).toBeInTheDocument()
@@ -270,7 +278,7 @@ describe('App', () => {
 
     mockFetch(200, [])
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText("e.g. a scheduling assistant for independent coaches…")).toBeInTheDocument()
@@ -343,7 +351,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(
@@ -439,7 +447,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('Completed')).toBeInTheDocument()
@@ -454,7 +462,7 @@ describe('App', () => {
     screen.getByText('In progress').click()
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
     })
 
     expect(screen.queryByText('Old summary')).not.toBeInTheDocument()
@@ -478,7 +486,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('Use my original idea')).toBeInTheDocument()
@@ -503,7 +511,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
@@ -530,7 +538,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('Use my original idea')).toBeInTheDocument()
@@ -580,7 +588,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
@@ -634,7 +642,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByLabelText('Challenger persona')).toBeInTheDocument()
@@ -671,7 +679,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
@@ -702,7 +710,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('First idea')).toBeInTheDocument()
@@ -732,7 +740,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('My idea')).toBeInTheDocument()
@@ -794,7 +802,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('My idea')).toBeInTheDocument()
@@ -853,7 +861,7 @@ describe('App', () => {
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('In progress')).toBeInTheDocument()
@@ -864,7 +872,7 @@ describe('App', () => {
     screen.getByText('In progress').click()
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
     })
 
     // Delete the completed session (different one)
@@ -872,7 +880,7 @@ describe('App', () => {
     deleteButtons[0].click() // First delete button is for 'Completed'
 
     // Verify the live chat view is still visible
-    expect(screen.getByPlaceholderText('Answer…')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
   })
 })
 
@@ -939,7 +947,7 @@ describe('App admin-group gate (direct navigation to /api/v1/plugins/ideation/ui
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession(['admin']))
     mockFetch(200, [])
 
-    render(<App />)
+    await renderPressureTest()
 
     expect(await screen.findByLabelText('Your idea')).toBeInTheDocument()
     expect(screen.queryByText(/available to members of the/i)).not.toBeInTheDocument()
@@ -993,7 +1001,7 @@ describe('App admin-group gate (direct navigation to /api/v1/plugins/ideation/ui
       throw new Error(`Unexpected URL: ${url}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText('My Completed Idea')).toBeInTheDocument()
@@ -1071,7 +1079,7 @@ describe('App admin-group gate (direct navigation to /api/v1/plugins/ideation/ui
       throw new Error(`Unexpected URL: ${String(url)}`)
     })
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('e.g. a scheduling assistant for independent coaches…')).toBeInTheDocument()
@@ -1101,6 +1109,25 @@ describe('App admin-group gate (direct navigation to /api/v1/plugins/ideation/ui
   }, 8000)
 })
 
+describe('App default tab', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/')
+  })
+
+  it('lists Brain-Storm first and selects it on a plain load', async () => {
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    mockFetch(200, [])
+    render(<App />)
+
+    const tabs = await screen.findAllByRole('tab')
+    expect(tabs.map((t) => t.textContent)).toEqual(['Brain-Storm', 'Pressure Test'])
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'false')
+    expect(screen.queryByLabelText('Your idea')).not.toBeInTheDocument()
+  })
+})
+
 describe('App ?seed= deep-link', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1111,6 +1138,7 @@ describe('App ?seed= deep-link', () => {
     window.history.replaceState({}, '', `/api/v1/plugins/ideation/ui/${search}`)
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
     mockFetch(200, [])
+    // No tab click: a ?seed= visit must land on Pressure Test by itself.
     render(<App />)
     return await screen.findByLabelText('Your idea')
   }
@@ -1122,9 +1150,21 @@ describe('App ?seed= deep-link', () => {
   })
 
   it('leaves the seed box empty when there is no ?seed=', async () => {
-    const box = await renderWithUrl('')
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/')
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    mockFetch(200, [])
+    await renderPressureTest()
+    const box = await screen.findByLabelText('Your idea')
 
     expect(box).toHaveValue('')
+  })
+
+  it('opens on Pressure Test, pre-filled, when ?seed= is present', async () => {
+    const box = await renderWithUrl('?seed=an%20idea')
+
+    expect(screen.getByRole('tab', { name: 'Pressure Test' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Brain-Storm' })).toHaveAttribute('aria-selected', 'false')
+    expect(box).toHaveValue('an idea')
   })
 
   it('truncates an over-long ?seed= to the server-side limit', async () => {
@@ -1193,7 +1233,7 @@ describe('session list freshness', () => {
     vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('refreshed-jwt')
     const f = mockFetch(200, [])
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => expect(f).toHaveBeenCalled())
     const sent = authHeaders(f)
@@ -1240,7 +1280,7 @@ describe('session list freshness', () => {
       return { ok: true, json: async () => ({ idea: null }), text: async () => '' } as Response
     })
 
-    render(<App />)
+    await renderPressureTest()
     await screen.findByLabelText('Your idea')
     // `findByText`, not `getByText`. Since #84 the sidebar only makes the empty
     // claim once `loaded` is true, i.e. after the sessions fetch resolves — and
@@ -1265,7 +1305,7 @@ describe('session list freshness', () => {
     vi.spyOn(auth, 'getFreshIdToken').mockResolvedValue('expired-tok')
     mockFetch(401, 'Unauthorized')
 
-    render(<App />)
+    await renderPressureTest()
 
     await waitFor(() => {
       expect(screen.getByText(/Couldn.t load your past runs/)).toBeInTheDocument()

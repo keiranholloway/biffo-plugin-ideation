@@ -150,7 +150,9 @@ def main() -> int:
     results = [_seed_one(p, core_api_url=core_api_url, admin_token=admin_token) for p in payloads]
     if args.update_qualifier:
         results.append(
-            _update_one(build_qualifier_payload(), core_api_url=core_api_url, admin_token=admin_token)
+            _update_one(
+                build_qualifier_payload(), core_api_url=core_api_url, admin_token=admin_token
+            )
         )
     return 0 if all(results) else 1
 

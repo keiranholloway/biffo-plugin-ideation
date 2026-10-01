@@ -26,7 +26,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpError, CoreHttpGateway
-from .brainstorm_definitions import QUALIFIER_MAX_TURNS, brainstorm_seed_payloads
+from .brainstorm_definitions import (
+    QUALIFIER_MAX_TURNS,
+    brainstorm_seed_payloads,
+    brainstorm_workflow_definitions,
+)
 from .definitions import MAX_TURNS, MIN_TURNS
 from .effective_config import builtin_chat_agents
 from .manifest import manifest_required_group
@@ -111,6 +115,34 @@ async def _seed_agent_config() -> None:
             "Failed to seed agent config at startup. Core's response: %s. "
             "Chat turns and analysis runs will fail loudly if a role's row is "
             "genuinely missing.",
+            exc,
+        )
+
+
+@app.on_event("startup")
+async def _seed_workflows() -> None:
+    """Declare the Brain-Storm fan-in workflow on every cold start.
+
+    ``POST /internal/plugins/me/workflows/seed`` upserts by ``definition_key``,
+    so the stored definition always matches the deployed build and no operator
+    step is needed. Without it a session never leaves ``researching``. A Core
+    failure is logged loudly, not raised, so a transient blip cannot wedge boot.
+    """
+    try:
+        transport = CoreTransport(founder_token="")
+        gateway = CoreHttpGateway(transport)
+        result = await gateway.seed_own_workflows(definitions=brainstorm_workflow_definitions())
+        created = sum(1 for r in result if r.get("created"))
+        _LOGGER.info(
+            "Declared %d workflow definition(s): %d created, %d updated",
+            len(result),
+            created,
+            len(result) - created,
+        )
+    except CoreHttpError as exc:
+        _LOGGER.exception(
+            "Failed to declare workflow definitions at startup. Core's response: %s. "
+            "Brain-Storm sessions will sit in `researching` until this succeeds.",
             exc,
         )
 
