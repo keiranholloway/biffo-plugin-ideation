@@ -40,6 +40,10 @@ export function BrainStorm({
   const isChatting =
     !!session && !['researching', 'synthesising', 'complete', 'failed'].includes(session.status)
 
+  // The chat converged: the server saved the brief and started research on its own.
+  const handedOff = !!session?.brief?.A && !!session?.brief?.B && !!session?.brief?.C
+  const lastReply = [...messages].reverse().find((m) => m.role === 'ideation')?.text
+
   const canStart = !!(target.trim() || geography.trim() || problem.trim())
 
   async function start() {
@@ -96,7 +100,9 @@ export function BrainStorm({
     setError(null)
     try {
       const r = await api.finaliseBrainstorm(session.session_id)
-      setSession((s) => (s ? { ...s, status: r.status, failure_reason: r.failure_reason } : s))
+      setSession((s) =>
+        s ? { ...s, status: r.status, failure_reason: r.failure_reason, brief: r.brief ?? s.brief } : s,
+      )
     } catch (e) {
       setError(errorText(e))
     } finally {
@@ -190,6 +196,21 @@ export function BrainStorm({
 
       {session && (status === 'researching' || status === 'synthesising') && (
         <div className="ide-progress" role="status">
+          {handedOff && session.brief && (
+            <div className="ide-brief">
+              {lastReply && <p>{lastReply}</p>}
+              <h2>Your brief</h2>
+              <dl>
+                <dt>A · Target</dt>
+                <dd>{session.brief.A}</dd>
+                <dt>B · Geography</dt>
+                <dd>{session.brief.B}</dd>
+                <dt>C · Problem area</dt>
+                <dd>{session.brief.C}</dd>
+              </dl>
+              <p>Brief complete — research has started automatically.</p>
+            </div>
+          )}
           <p>
             {status === 'researching'
               ? 'Researching: six agents are investigating your brief in parallel…'

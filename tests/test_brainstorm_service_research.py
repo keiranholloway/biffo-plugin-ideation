@@ -367,3 +367,57 @@ async def test_chat_turn_persists_brief_and_research_input_includes_it() -> None
     await svc.finalise(owner_sub="alice", session_id="b1")
     for r in core.requests:
         assert r["input_payload"]["brief"]["qualified_brief"] == core.sessions["b1"].brief
+
+
+_DONE = (
+    'Dentists in the UK struggling with no-shows. Research starts now.\n'
+    '<brief>{"A": "dentists", "B": "UK", "C": "no-shows"}</brief>'
+)
+
+
+@_sync
+async def test_scripted_conversation_converges_and_starts_research() -> None:
+    core = FakeCore()
+    core.add_session(thread_id="t1")
+    svc = _svc(core)
+
+    # Early turns: questions only, no handoff.
+    for reply in ("Who do you want to serve?", "Where?"):
+        core.reply = reply
+        await svc.chat_turn(owner_sub="alice", session_id="b1", user_message="x")
+        assert core.sessions["b1"].status == BS_QUALIFYING
+        assert core.requests == []
+
+    # Final turn: completion signal.
+    core.reply = _DONE
+    result = await svc.chat_turn(owner_sub="alice", session_id="b1", user_message="no-shows")
+
+    assert "<brief>" not in result.reply
+    s = core.sessions["b1"]
+    assert s.brief is not None
+    assert (s.brief["A"], s.brief["B"], s.brief["C"]) == ("dentists", "UK", "no-shows")
+    assert s.status == BS_RESEARCHING
+    assert len(core.requests) == len(RESEARCH_AGENT_NAMES)
+    payload = core.requests[0]["input_payload"]["brief"]
+    assert payload["target"] == "dentists" and payload["qualified_brief"]["C"] == "no-shows"
+
+
+@_sync
+async def test_incomplete_or_malformed_signal_does_not_hand_off() -> None:
+    core = FakeCore()
+    core.add_session(thread_id="t1")
+    svc = _svc(core)
+    for reply in (
+        'Almost. <brief>{"A": "dentists", "B": "", "C": "x"}</brief>',
+        "Almost. <brief>not json</brief>",
+    ):
+        core.reply = reply
+        await svc.chat_turn(owner_sub="alice", session_id="b1", user_message="x")
+        assert core.sessions["b1"].status == BS_QUALIFYING
+    assert core.requests == []
+
+
+def test_qualifier_prompt_describes_abc_brief_and_signal() -> None:
+    from ideation.brainstorm_definitions import QUALIFIER_INSTRUCTIONS
+
+    assert "A/B/C" in QUALIFIER_INSTRUCTIONS and "<brief>" in QUALIFIER_INSTRUCTIONS
