@@ -141,7 +141,11 @@ jobs:
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
+      # fetch-depth: 0 so `origin/$GITHUB_BASE_REF` resolves and
+      # py-dependency-audit.sh can tell pre-existing findings from new ones.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
