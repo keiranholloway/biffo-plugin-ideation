@@ -62,12 +62,9 @@ plugin's own copy of shared shapes like `Scorecard` is intentional).
 - Idea Scout's fan-out→fan-in join is a **generic platform primitive**
   (`orchestrator/actions.py`'s `agent_fan_in`, driven by EventBridge `agent.run.completed`
   + Core's `causation_id`/`depth` chain tracking) — no new platform infrastructure is
-  needed, but **it requires a manual, idempotent, once-per-environment operator step**:
-  Idea Scout's own `scripts/seed_fan_in_workflow.py`, run by hand against a live
-  environment with a Cognito admin token. It is *not* triggered by deploy or app startup.
-  Brain-Storming needs its own equivalent script, and the milestone that adds it must be
-  honest that full end-to-end behaviour in a given environment additionally needs this
-  one-time run — a deploy-runbook item, not a defect.
+  needed. Brain-Storming declares its own fan-in workflow on every plugin startup via
+  `POST /internal/plugins/me/workflows/seed` (upsert, SigV4 service principal), so there is
+  no operator script and no once-per-environment step.
 - `app.py` and `admin_app.py` each have their own copy of the startup agent-config seeding
   hook (`_seed_agent_config`) — any milestone adding new agent roles touches both files.
 - Idea Scout's model calls use OpenRouter's `:online` suffix (e.g.
