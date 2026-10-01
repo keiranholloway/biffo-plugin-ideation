@@ -18,7 +18,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from .definitions import MAX_TURNS, MIN_TURNS
-from .effective_config import chat_model
 from .manifest import manifest_required_group
 
 QUALIFIER_AGENT_NAME = "ideation-brainstorm-qualifier"
@@ -308,8 +307,9 @@ def opportunities_tool_schema() -> dict[str, Any]:
 
 
 def brainstorm_seed_payloads() -> list[dict[str, Any]]:
-    """Seed rows for all eight Brain-Storming roles: the qualifier, the six
-    research agents and the synthesis agent. The one builder both apps' startup
+    """Seed rows for the Brain-Storming roles: the six research agents and the
+    synthesis agent. The qualifier row comes from ``builtin_chat_agents()``
+    (single source, role ``qualifier``). The one builder both apps' startup
     seeding uses. ``required_group`` comes from the manifest, never a literal
     (issue #171)."""
     group = manifest_required_group("user_ingress")
@@ -328,7 +328,6 @@ def brainstorm_seed_payloads() -> list[dict[str, Any]]:
         }
 
     return [
-        row(QUALIFIER_AGENT_NAME, chat_model()),
         *(row(name, DEFAULT_RESEARCH_MODEL) for name in RESEARCH_AGENT_NAMES),
         row(SYNTHESIS_AGENT_NAME, DEFAULT_SYNTHESIS_MODEL),
     ]

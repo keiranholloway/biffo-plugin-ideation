@@ -309,8 +309,8 @@ async def test_synthesis_empty_list_fails_and_overlong_is_trimmed() -> None:
 
 def test_eight_seed_roles_with_online_research_models() -> None:
     rows = brainstorm_seed_payloads()
-    assert len(rows) == 8
-    assert len({r["agent_key"] for r in rows}) == 8
+    assert len(rows) == 7
+    assert len({r["agent_key"] for r in rows}) == 7
     by = {r["role"]: r for r in rows}
     for name in RESEARCH_AGENT_NAMES:
         assert by[name]["model"].endswith(":online")
