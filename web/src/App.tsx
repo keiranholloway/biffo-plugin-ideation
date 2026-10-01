@@ -40,8 +40,8 @@ function readSeedParam(): string {
 
 function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'pressure-test', label: 'Pressure Test' },
     { id: 'brain-storm', label: 'Brain-Storm' },
+    { id: 'pressure-test', label: 'Pressure Test' },
   ]
   return (
     <div role="tablist" className="ide-tabs">
@@ -68,11 +68,13 @@ export default function App() {
   // out" (which redirects to the portal login) — re-authenticating would not
   // help, so say so instead of bouncing them round a loop.
   const [notPermitted, setNotPermitted] = useState(false)
-  const [tab, setTab] = useState<Tab>('pressure-test')
-  const [view, setView] = useState<View>({ kind: 'new' })
   // Lazy initialiser: read once, at mount. After this the box belongs to the
   // founder — editing or clearing it is never overwritten by the param.
   const [seed, setSeed] = useState(readSeedParam)
+  // Brain-Storm is the default landing tab; a ?seed= deep-link lands on
+  // Pressure Test, pre-filled.
+  const [tab, setTab] = useState<Tab>(() => (seed ? 'pressure-test' : 'brain-storm'))
+  const [view, setView] = useState<View>({ kind: 'new' })
   const [session, setSession] = useState<SessionState | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
