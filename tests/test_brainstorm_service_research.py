@@ -370,7 +370,7 @@ async def test_chat_turn_persists_brief_and_research_input_includes_it() -> None
 
 
 _DONE = (
-    'Dentists in the UK struggling with no-shows. Research starts now.\n'
+    "Dentists in the UK struggling with no-shows. Research starts now.\n"
     '<brief>{"A": "dentists", "B": "UK", "C": "no-shows"}</brief>'
 )
 

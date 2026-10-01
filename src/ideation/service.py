@@ -24,11 +24,11 @@ from .brainstorm_definitions import (
     OPPORTUNITIES_TOOL_NAME,
     QUALIFIER_AGENT_NAME,
     QUALIFIER_MAX_TURNS,
-    parse_completed_brief,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
     OpportunitySet,
     findings_tool_schema,
+    parse_completed_brief,
     research_definition,
 )
 from .definitions import (
