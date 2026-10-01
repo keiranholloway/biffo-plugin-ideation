@@ -751,3 +751,10 @@ def test_extract_report_deeply_nested_arguments_is_malformed() -> None:
     ]
     with pytest.raises(MalformedReportError):
         extract_report(messages)
+
+
+def test_get_report_is_none_while_still_gathering() -> None:
+    core = FakeCore()
+    svc = _service(core, min_turns=1)
+    sid = asyncio.run(svc.start_session(owner_sub="u", seed_idea="idea")).id
+    assert asyncio.run(svc.get_report(owner_sub="u", session_id=sid)) is None

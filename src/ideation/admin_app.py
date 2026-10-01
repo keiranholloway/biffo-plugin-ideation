@@ -49,6 +49,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from .adapter import CoreHttpError, CoreHttpGateway
+from .brainstorm_definitions import brainstorm_seed_payloads
 from .effective_config import builtin_chat_agents, effective_models
 from .manifest import manifest_required_group
 from .transport import CoreTransport
@@ -91,7 +92,9 @@ async def _seed_agent_config() -> None:
     try:
         transport = CoreTransport(founder_token="")
         gateway = CoreHttpGateway(transport)
-        result = await gateway.seed_own_config(config=builtin_chat_agents())
+        result = await gateway.seed_own_config(
+            config=[*builtin_chat_agents(), *brainstorm_seed_payloads()]
+        )
         created = sum(1 for r in result if r.get("created"))
         already_present = len(result) - created
         _LOGGER.info(
