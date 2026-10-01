@@ -132,7 +132,7 @@ Workflow/JTBD, Trend, Economics, Contrarian/White-space) plus the synthesis agen
 `finalise()` method firing all six under one `chain_id` via M1's `request_agent_run`, and
 the state-advance logic (`researching`→`synthesising`→`complete`/`failed`, mirroring Idea
 Scout's `_advance_research`/`_advance_synthesis` including the "never started" vs "failed"
-distinction). Also delivers `scripts/seed_brainstorm_fan_in_workflow.py` (six-agent
+distinction). Also delivers the fan-in workflow declaration (`brainstorm_fan_in_definition`, six-agent
 `expect_agents`, synthesis `agent_name`) with its own tests (mirroring
 `test_idea_scout_seed_fan_in_workflow.py`), and extends both `app.py`'s and
 `admin_app.py`'s startup seeding to cover all eight new agent roles.
@@ -144,7 +144,7 @@ behaviour additionally needs the seed script run once per environment (see Curre
 **Depends on**: M2 (same `service.py`/`app.py`/`admin_app.py`). Read-disjoint from M4.
 **Files**: `src/ideation/brainstorm_definitions.py`, `src/ideation/service.py`,
 `src/ideation/app.py`, `src/ideation/admin_app.py`,
-`scripts/seed_brainstorm_fan_in_workflow.py`, `tests/`.
+`tests/`.
 
 ### M4: Brain-Storm tab scaffold and qualifying-chat UI
 
@@ -187,10 +187,8 @@ coherent milestone.
   golden path (start a brainstorm, qualify, launch research, see progress, pick an
   opportunity, land in Pressure Test with it seeded) plus edge cases (a failed research
   agent, an empty/short qualifying chat).
-- End-to-end live verification (after M5 merges) additionally requires running
-  `scripts/seed_brainstorm_fan_in_workflow.py` once against the target environment —
-  called out explicitly so it isn't mistaken for a bug if a real run doesn't complete
-  before that script has been run there.
+- End-to-end live verification (after M5 merges) needs no operator step: the plugin declares its fan-in workflow itself on every startup
+  via `POST /internal/plugins/me/workflows/seed` (upsert, keyed by `definition_key`).
 
 ## Rollout
 
