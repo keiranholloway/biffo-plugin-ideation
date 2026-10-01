@@ -137,3 +137,19 @@ def test_no_research_launch_route(client):
 def test_qualifier_prompt_is_blue_sky_not_pressure_testing():
     assert "NO fixed idea" in QUALIFIER_INSTRUCTIONS
     assert "do NOT pressure-test" in QUALIFIER_INSTRUCTIONS
+
+
+def test_opportunities_route_is_empty_for_a_fresh_session(client, core):
+    sid = client.post("/brainstorm/sessions", json={"target": "dentists"}).json()["session_id"]
+
+    async def _none(*, owner_sub, session_id):
+        return []
+
+    core.list_brainstorm_opportunities = _none  # type: ignore[attr-defined]
+    resp = client.get(f"/brainstorm/sessions/{sid}/opportunities")
+    assert resp.status_code == 200
+    assert resp.json() == {"opportunities": []}
+
+
+def test_opportunities_route_404s_for_unknown_session(client):
+    assert client.get("/brainstorm/sessions/nope/opportunities").status_code == 404

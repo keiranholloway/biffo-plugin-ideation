@@ -101,10 +101,20 @@ export interface BrainstormState {
   turn_count: number
   max_turns: number
   created_at: string
+  failure_reason?: string | null
 }
 
 export interface BrainstormTurn extends BrainstormState {
   reply: string
+}
+
+export interface BrainstormOpportunity {
+  id: string
+  rank: number
+  title: string
+  pitch: string
+  rationale: string | null
+  evidence: { url: string; note?: string }[]
 }
 
 export type Api = ReturnType<typeof createApi>
@@ -155,5 +165,14 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
       request<BrainstormTurn>('POST', '/brainstorm/sessions', intake),
     sendBrainstormMessage: (id: string, message: string) =>
       request<BrainstormTurn>('POST', `/brainstorm/sessions/${id}/messages`, { message }),
+    finaliseBrainstorm: (id: string) =>
+      request<BrainstormState>('POST', `/brainstorm/sessions/${id}/finalise`),
+    getBrainstorm: (id: string) =>
+      request<BrainstormState>('GET', `/brainstorm/sessions/${id}`),
+    getBrainstormOpportunities: (id: string) =>
+      request<{ opportunities: BrainstormOpportunity[] }>(
+        'GET',
+        `/brainstorm/sessions/${id}/opportunities`,
+      ),
   }
 }

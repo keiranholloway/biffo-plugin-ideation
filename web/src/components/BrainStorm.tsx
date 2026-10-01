@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { ApiError, type Api, type BrainstormState } from '../lib/api'
+import { ApiError, type Api, type BrainstormOpportunity, type BrainstormState } from '../lib/api'
 
 interface Msg {
   role: 'you' | 'ideation'
@@ -17,7 +17,15 @@ const MAX_TARGET = 4_000
 const MAX_GEOGRAPHY = 4_000
 const MAX_PROBLEM = 8_000
 
-export function BrainStorm({ api }: { api: Api }) {
+const POLL_MS = 3000
+
+export function BrainStorm({
+  api,
+  onPressureTest,
+}: {
+  api: Api
+  onPressureTest?: (seed: string) => void
+}) {
   const [target, setTarget] = useState('')
   const [geography, setGeography] = useState('')
   const [problem, setProblem] = useState('')
@@ -26,6 +34,10 @@ export function BrainStorm({ api }: { api: Api }) {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [opportunities, setOpportunities] = useState<BrainstormOpportunity[]>([])
+
+  const isChatting =
+    !!session && !['researching', 'synthesising', 'complete', 'failed'].includes(session.status)
 
   const canStart = !!(target.trim() || geography.trim() || problem.trim())
 
@@ -77,10 +89,57 @@ export function BrainStorm({ api }: { api: Api }) {
     }
   }
 
+  async function generate() {
+    if (!session) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await api.finaliseBrainstorm(session.session_id)
+      setSession((s) => (s ? { ...s, status: r.status, failure_reason: r.failure_reason } : s))
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // While researching or synthesising, poll the session; it advances server-side
+  // on each read. On completion, fetch the ranked opportunities.
+  const sessionId = session?.session_id
+  const status = session?.status
+  useEffect(() => {
+    if (!sessionId || (status !== 'researching' && status !== 'synthesising')) return
+    let stopped = false
+    let timer: number | undefined
+    const tick = async () => {
+      try {
+        const r = await api.getBrainstorm(sessionId)
+        if (stopped) return
+        if (r.status === 'complete') {
+          const o = await api.getBrainstormOpportunities(sessionId)
+          if (stopped) return
+          setOpportunities(o.opportunities)
+        }
+        setSession((s) => (s ? { ...s, status: r.status, failure_reason: r.failure_reason } : s))
+        if (r.status === 'researching' || r.status === 'synthesising') {
+          timer = window.setTimeout(() => void tick(), POLL_MS)
+        }
+      } catch (e) {
+        if (!stopped) setError(errorText(e))
+      }
+    }
+    timer = window.setTimeout(() => void tick(), POLL_MS)
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+    }
+  }, [api, sessionId, status])
+
   function reset() {
     setSession(null)
     setMessages([])
     setInput('')
+    setOpportunities([])
     setError(null)
   }
 
@@ -128,7 +187,61 @@ export function BrainStorm({ api }: { api: Api }) {
         </div>
       )}
 
-      {session && (
+      {session && (status === 'researching' || status === 'synthesising') && (
+        <div className="ide-progress" role="status">
+          <p>
+            {status === 'researching'
+              ? 'Researching: six agents are investigating your brief in parallel…'
+              : 'Synthesising: ranking the opportunities…'}
+          </p>
+        </div>
+      )}
+
+      {session && status === 'failed' && (
+        <div className="ide-failed">
+          <p>{session.failure_reason ?? 'The brain-storm failed.'}</p>
+          <button type="button" onClick={reset}>
+            New brain-storm
+          </button>
+        </div>
+      )}
+
+      {session && status === 'complete' && (
+        <div className="ide-opportunities">
+          <h2>Ranked opportunities</h2>
+          <ol>
+            {opportunities.map((o) => (
+              <li key={o.id} className="ide-opportunity">
+                <h3>{o.title}</h3>
+                <p>{o.pitch}</p>
+                {o.rationale && <p className="ide-rationale">{o.rationale}</p>}
+                {o.evidence.length > 0 && (
+                  <ul className="ide-evidence">
+                    {o.evidence.map((e, i) => (
+                      <li key={i}>
+                        <a href={e.url} target="_blank" rel="noopener noreferrer">
+                          {e.url}
+                        </a>
+                        {e.note ? ` — ${e.note}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {onPressureTest && (
+                  <button type="button" onClick={() => onPressureTest(`${o.title}: ${o.pitch}`)}>
+                    Pressure-test this
+                  </button>
+                )}
+              </li>
+            ))}
+          </ol>
+          <button type="button" onClick={reset}>
+            New brain-storm
+          </button>
+        </div>
+      )}
+
+      {session && isChatting && (
         <div className="ide-chat">
           <ul className="ide-messages">
             {messages.map((m, i) => (
@@ -149,6 +262,9 @@ export function BrainStorm({ api }: { api: Api }) {
             />
             <button onClick={() => void send()} disabled={busy || !input.trim()}>
               Send
+            </button>
+            <button type="button" onClick={() => void generate()} disabled={busy}>
+              Generate opportunities
             </button>
             <button type="button" onClick={reset} disabled={busy}>
               New brain-storm
