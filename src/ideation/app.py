@@ -366,7 +366,6 @@ def _bs_state(session) -> dict:  # type: ignore[no-untyped-def]
         "max_turns": QUALIFIER_MAX_TURNS,
         "created_at": session.created_at,
         "failure_reason": session.failure_reason,
-        "brief": session.brief,
     }
 
 

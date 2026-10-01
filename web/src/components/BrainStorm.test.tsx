@@ -63,33 +63,3 @@ describe('BrainStorm research flow', () => {
     expect(onPressureTest).toHaveBeenCalledWith('Slot filler: Fill no-shows')
   }, 10000)
 })
-
-describe('BrainStorm handoff', () => {
-  it('shows the A/B/C brief and research progress when the chat converges', async () => {
-    const brief = { A: 'dentists', B: 'UK', C: 'no-shows', summary: 'Dentists in the UK.' }
-    const api = {
-      startBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'qualifying', reply: 'Q?' }),
-      sendBrainstormMessage: vi.fn().mockResolvedValue({
-        ...state,
-        status: 'researching',
-        brief,
-        reply: 'Dentists in the UK. Research starts now.',
-      }),
-      getBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'researching', brief }),
-    } as unknown as Api
-    render(<BrainStorm api={api} />)
-    fireEvent.change(screen.getByLabelText('Target company or industry'), { target: { value: 'x' } })
-    fireEvent.click(screen.getByRole('button', { name: /Start brain-storm/ }))
-    await waitFor(() => expect(screen.getByText('Q?')).toBeInTheDocument())
-
-    fireEvent.change(screen.getByLabelText('Your reply'), { target: { value: 'no-shows' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-
-    await waitFor(() => expect(screen.getByText(/Brief complete/)).toBeInTheDocument())
-    expect(screen.getByText('dentists')).toBeInTheDocument()
-    expect(screen.getByText('UK')).toBeInTheDocument()
-    expect(screen.getByText('no-shows')).toBeInTheDocument()
-    expect(screen.getByText(/Researching/)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Your reply')).not.toBeInTheDocument()
-  })
-})

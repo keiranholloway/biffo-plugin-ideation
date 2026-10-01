@@ -102,8 +102,6 @@ export interface BrainstormState {
   max_turns: number
   created_at: string
   failure_reason?: string | null
-  // The qualified A/B/C brief (A target, B geography, C problem area) once the chat converges.
-  brief?: { A?: string; B?: string; C?: string; summary?: string } | null
 }
 
 export interface BrainstormTurn extends BrainstormState {
