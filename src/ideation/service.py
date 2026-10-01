@@ -28,6 +28,7 @@ from .brainstorm_definitions import (
     SYNTHESIS_AGENT_NAME,
     OpportunitySet,
     findings_tool_schema,
+    parse_completed_brief,
     research_definition,
 )
 from .definitions import (
@@ -358,7 +359,8 @@ class BrainstormService:
     """The Brain-Storming qualifying chat — transport-agnostic, like
     :class:`IdeationService`. Sessions start in ``qualifying``; each turn is a
     buffered chat turn with the qualifier agent, capped at
-    ``QUALIFIER_MAX_TURNS``. There is deliberately no launch-research action yet."""
+    ``QUALIFIER_MAX_TURNS``. When the qualifier signals a finished A/B/C brief the
+    brief is saved and research starts automatically."""
 
     def __init__(self, core: CoreGateway, *, max_turns: int = QUALIFIER_MAX_TURNS) -> None:
         self._core = core
@@ -433,13 +435,24 @@ class BrainstormService:
             agent_name=QUALIFIER_AGENT_NAME,
             user_text=user_message,
         )
-        # Persist the qualifier's latest reply as the session's brief — once the
-        # chat converges that reply IS the summarised brief, and research reads
-        # it from ``session.brief`` (finalise -> ``qualified_brief``).
+        visible, completed = parse_completed_brief(result.reply)
         fields: dict[str, Any] = {"turn_count": session.turn_count + 1}
-        if (result.reply or "").strip():
-            fields["brief"] = {"summary": result.reply.strip()}
+        if completed is not None:
+            # Converged: save the structured A/B/C brief, then hand off to research.
+            fields.update(
+                brief={"summary": visible, **completed},
+                target=completed["A"],
+                geography=completed["B"],
+                problem=completed["C"],
+            )
+        elif visible:
+            # Otherwise keep the latest reply as a running summary so research
+            # (finalise -> ``qualified_brief``) never ignores the conversation.
+            fields["brief"] = {"summary": visible}
         await self._core.update_brainstorm_session(session_id=session_id, **fields)
+        result = dataclasses.replace(result, reply=visible)
+        if completed is not None:
+            await self.finalise(owner_sub=owner_sub, session_id=session_id)
         return result
 
     async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
