@@ -38,3 +38,28 @@ describe('BrainStorm', () => {
     expect(api.sendBrainstormMessage).toHaveBeenCalledWith('s1', 'The owner')
   })
 })
+
+describe('BrainStorm research flow', () => {
+  it('finalises, polls to completion, lists opportunities and hands off', async () => {
+    const opp = { id: 'o1', rank: 1, title: 'Slot filler', pitch: 'Fill no-shows', rationale: 'why', evidence: [] }
+    const api = {
+      startBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'qualifying', reply: 'Q?' }),
+      finaliseBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'researching' }),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'complete' }),
+      getBrainstormOpportunities: vi.fn().mockResolvedValue({ opportunities: [opp] }),
+    } as unknown as Api
+    const onPressureTest = vi.fn()
+    render(<BrainStorm api={api} onPressureTest={onPressureTest} />)
+    fireEvent.change(screen.getByLabelText('Target company or industry'), { target: { value: 'clinics' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start brain-storm/ }))
+    await waitFor(() => expect(screen.getByText('Q?')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Generate opportunities' }))
+    await waitFor(() => expect(screen.getByText(/Researching/)).toBeInTheDocument())
+    expect(api.finaliseBrainstorm).toHaveBeenCalledWith('s1')
+
+    await waitFor(() => expect(screen.getByText('Slot filler')).toBeInTheDocument(), { timeout: 6000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Pressure-test this' }))
+    expect(onPressureTest).toHaveBeenCalledWith('Slot filler: Fill no-shows')
+  }, 10000)
+})

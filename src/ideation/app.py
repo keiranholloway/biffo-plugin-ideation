@@ -307,7 +307,7 @@ async def read_report(
 
 
 # ── Brain-Storming: qualifying chat ──────────────────────────────────────────
-# Deliberately no "launch research" route yet — that is the next milestone.
+# Research launch, polling and results routes are at the end of this section.
 
 
 def get_brainstorm_service(founder: ForwardedUser = Depends(require_founder)) -> BrainstormService:
@@ -333,6 +333,7 @@ def _bs_state(session) -> dict:  # type: ignore[no-untyped-def]
         "turn_count": session.turn_count,
         "max_turns": QUALIFIER_MAX_TURNS,
         "created_at": session.created_at,
+        "failure_reason": session.failure_reason,
     }
 
 
@@ -411,3 +412,37 @@ async def delete_brainstorm_session(
     svc: BrainstormService = Depends(get_brainstorm_service),
 ) -> None:
     await svc.delete_session(owner_sub=founder.sub, session_id=session_id)
+
+
+@app.post("/brainstorm/sessions/{session_id}/finalise", status_code=202)
+async def finalise_brainstorm_session(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """Fire the six research agents; the founder then polls the session."""
+    session = await svc.finalise(owner_sub=founder.sub, session_id=session_id)
+    return _bs_state(session)
+
+
+@app.get("/brainstorm/sessions/{session_id}/opportunities")
+async def read_brainstorm_opportunities(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """Ranked opportunities; empty until the session is complete."""
+    opps = await svc.list_opportunities(owner_sub=founder.sub, session_id=session_id)
+    return {
+        "opportunities": [
+            {
+                "id": o.id,
+                "rank": o.rank,
+                "title": o.title,
+                "pitch": o.pitch,
+                "rationale": o.rationale,
+                "evidence": o.evidence or [],
+            }
+            for o in opps
+        ]
+    }

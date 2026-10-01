@@ -52,6 +52,7 @@ from .models import (
     GATHERING,
     RUN_COMPLETED,
     RUN_TERMINAL,
+    BrainstormOpportunity,
     BrainstormSession,
     Session,
     TurnResult,
@@ -401,6 +402,15 @@ class BrainstormService:
         if session.status == BS_SYNTHESISING:
             return await self._advance_synthesis(session)
         return session
+
+    async def list_opportunities(
+        self, *, owner_sub: str, session_id: str
+    ) -> list[BrainstormOpportunity]:
+        """The session's ranked opportunities (empty until it is complete)."""
+        await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        return await self._core.list_brainstorm_opportunities(
+            owner_sub=owner_sub, session_id=session_id
+        )
 
     async def list_sessions(self, *, owner_sub: str) -> list[BrainstormSession]:
         """The founder's sessions, most-recent-first, soft-deleted excluded."""

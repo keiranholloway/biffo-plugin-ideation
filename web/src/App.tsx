@@ -316,7 +316,16 @@ export default function App() {
         <main className="ide">
           <h1>Ideation Engine</h1>
           <TabBar tab={tab} onChange={setTab} />
-          {api && <BrainStorm api={api} />}
+          {api && (
+            <BrainStorm
+              api={api}
+              onPressureTest={(s) => {
+                setSeed(s.slice(0, MAX_SEED_LENGTH))
+                setView({ kind: 'new' })
+                setTab('pressure-test')
+              }}
+            />
+          )}
         </main>
       </div>
     )
