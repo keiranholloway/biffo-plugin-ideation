@@ -135,6 +135,16 @@ class BrainstormSession:
     created_at: str | None = None
     deleted: bool = False
 
+    @property
+    def ready(self) -> bool:
+        """True only when the qualifier's structured signal said the brief is ready."""
+        return bool(self.brief and self.brief.get("ready") is True)
+
+    @property
+    def gaps(self) -> list[str]:
+        raw = (self.brief or {}).get("gaps")
+        return [str(g) for g in raw] if isinstance(raw, list) else []
+
 
 @dataclass(frozen=True)
 class BrainstormOpportunity:

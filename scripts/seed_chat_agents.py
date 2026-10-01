@@ -26,7 +26,13 @@ that hazard now, not this script.
 Usage:
     CORE_API_URL=https://<api-id>.execute-api.<region>.amazonaws.com \
     ADMIN_BEARER_TOKEN=<a real Cognito admin id/access token> \
-    python scripts/seed_chat_agents.py [--dry-run]
+    python scripts/seed_chat_agents.py [--dry-run] [--update-qualifier]
+
+Seeding is insert-if-absent, so an already-seeded environment keeps its OLD
+qualifier prompt after a deploy. ``--update-qualifier`` PUTs the current built-in
+qualifier prompt over the stored row (``PUT /admin/plugins/ideation/chat-agents/
+ideation-brainstorm-qualifier``) — it overwrites any admin edit to that one row.
+The same can be done by hand in the admin UI's chat-agents editor.
 """
 
 from __future__ import annotations
@@ -93,10 +99,32 @@ def _seed_one(payload: dict, *, core_api_url: str, admin_token: str) -> bool:
     return True
 
 
+def _update_one(payload: dict, *, core_api_url: str, admin_token: str) -> bool:
+    """PUT one payload over its stored row; True on success."""
+    url = (
+        f"{core_api_url.rstrip('/')}/api/v1/admin/plugins/{_PLUGIN_NAME}"
+        f"/chat-agents/{payload['agent_key']}"
+    )
+    resp = httpx.put(url, json=payload, headers={"Authorization": f"Bearer {admin_token}"})
+    if resp.status_code >= 400:
+        print(
+            f"Update failed for {payload['agent_key']!r}: {resp.status_code} {resp.text}",
+            file=sys.stderr,
+        )
+        return False
+    print(f"Updated {payload['agent_key']!r}.")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dry-run", action="store_true", help="Print the payloads without sending them."
+    )
+    parser.add_argument(
+        "--update-qualifier",
+        action="store_true",
+        help="Overwrite the stored qualifier row with the current built-in prompt.",
     )
     args = parser.parse_args()
 
@@ -120,6 +148,10 @@ def main() -> int:
     # A list comprehension (not a generator into all()) so a failure on the
     # challenger doesn't short-circuit and skip attempting the others too.
     results = [_seed_one(p, core_api_url=core_api_url, admin_token=admin_token) for p in payloads]
+    if args.update_qualifier:
+        results.append(
+            _update_one(build_qualifier_payload(), core_api_url=core_api_url, admin_token=admin_token)
+        )
     return 0 if all(results) else 1
 
 

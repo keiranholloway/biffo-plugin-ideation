@@ -24,6 +24,7 @@ from .brainstorm_definitions import (
     OPPORTUNITIES_TOOL_NAME,
     QUALIFIER_AGENT_NAME,
     QUALIFIER_MAX_TURNS,
+    parse_brief_state,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
     OpportunitySet,
@@ -358,7 +359,7 @@ class BrainstormService:
     """The Brain-Storming qualifying chat — transport-agnostic, like
     :class:`IdeationService`. Sessions start in ``qualifying``; each turn is a
     buffered chat turn with the qualifier agent, capped at
-    ``QUALIFIER_MAX_TURNS``. There is deliberately no launch-research action yet."""
+    its own safety ceiling ``QUALIFIER_MAX_TURNS`` (not Pressure Test's)."""
 
     def __init__(self, core: CoreGateway, *, max_turns: int = QUALIFIER_MAX_TURNS) -> None:
         self._core = core
@@ -433,10 +434,15 @@ class BrainstormService:
             agent_name=QUALIFIER_AGENT_NAME,
             user_text=user_message,
         )
-        await self._core.update_brainstorm_session(
-            session_id=session_id, turn_count=session.turn_count + 1
-        )
-        return result
+        # The readiness signal is the structured block, parsed and validated —
+        # never the prose. The latest valid block wins; an absent or malformed one
+        # leaves the previous brief untouched. The block is hidden from the founder.
+        visible, state = parse_brief_state(result.reply)
+        fields: dict[str, Any] = {"turn_count": session.turn_count + 1}
+        if state is not None:
+            fields["brief"] = state.model_dump()
+        await self._core.update_brainstorm_session(session_id=session_id, **fields)
+        return dataclasses.replace(result, reply=visible)
 
     async def delete_session(self, *, owner_sub: str, session_id: str) -> None:
         await self._load_owned(owner_sub=owner_sub, session_id=session_id)

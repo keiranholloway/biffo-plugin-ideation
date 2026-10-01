@@ -100,8 +100,30 @@ export interface BrainstormState {
   problem: string | null
   turn_count: number
   max_turns: number
+  ready?: boolean
+  at_ceiling?: boolean
+  brief?: BrainstormBrief | null
+  gaps?: string[]
   created_at: string
   failure_reason?: string | null
+}
+
+export interface BrainstormBrief {
+  ready?: boolean
+  summary?: string
+  what_the_business_wants?: {
+    goals?: string
+    capabilities_and_assets?: string
+    target_customer?: string
+  }
+  business_problem?: string
+  size_and_shape?: {
+    who_and_how_many?: string
+    cost_and_frequency?: string
+    current_workarounds?: string
+    boundaries_and_constraints?: string
+  }
+  gaps?: string[]
 }
 
 export interface BrainstormTurn extends BrainstormState {

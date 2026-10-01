@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 
-import { ApiError, type Api, type BrainstormOpportunity, type BrainstormState } from '../lib/api'
+import {
+  ApiError,
+  type Api,
+  type BrainstormBrief,
+  type BrainstormOpportunity,
+  type BrainstormState,
+} from '../lib/api'
 
 interface Msg {
   role: 'you' | 'ideation'
@@ -18,6 +24,34 @@ const MAX_GEOGRAPHY = 4_000
 const MAX_PROBLEM = 8_000
 
 const POLL_MS = 3000
+
+function BriefDetails({ brief }: { brief?: BrainstormBrief | null }) {
+  if (!brief) return null
+  const w = brief.what_the_business_wants ?? {}
+  const z = brief.size_and_shape ?? {}
+  const rows: [string, string | undefined][] = [
+    ['Goals', w.goals],
+    ['Capabilities and assets', w.capabilities_and_assets],
+    ['Target customer', w.target_customer],
+    ['Business problem', brief.business_problem],
+    ['Who and how many', z.who_and_how_many],
+    ['Cost and frequency', z.cost_and_frequency],
+    ['Current workarounds', z.current_workarounds],
+    ['Boundaries and constraints', z.boundaries_and_constraints],
+  ]
+  const shown = rows.filter(([, v]) => v && v.trim())
+  if (shown.length === 0) return null
+  return (
+    <dl className="ide-brief-details">
+      {shown.map(([k, v]) => (
+        <div key={k}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 export function BrainStorm({
   api,
@@ -38,6 +72,10 @@ export function BrainStorm({
 
   const isChatting =
     !!session && !['researching', 'synthesising', 'complete', 'failed'].includes(session.status)
+
+  const atCeiling = !!session && (session.at_ceiling ?? session.turn_count >= session.max_turns)
+  const showRun = !!session && (!!session.ready || atCeiling)
+  const gaps = session?.gaps ?? session?.brief?.gaps ?? []
 
   const canStart = !!(target.trim() || geography.trim() || problem.trim())
 
@@ -251,6 +289,26 @@ export function BrainStorm({
               </li>
             ))}
           </ul>
+          {showRun && (
+            <div className="ide-brief" role="region" aria-label="Brief summary">
+              <h2>{session.ready ? 'Your brief is ready' : 'Conversation limit reached'}</h2>
+              {session.brief?.summary && <p>{session.brief.summary}</p>}
+              <BriefDetails brief={session.brief} />
+              {!session.ready && (
+                <p>Some things are still unclear. You can run research anyway, knowing the gaps:</p>
+              )}
+              {gaps.length > 0 && (
+                <ul className="ide-gaps" aria-label="Gaps">
+                  {gaps.map((g, i) => (
+                    <li key={i}>{g}</li>
+                  ))}
+                </ul>
+              )}
+              <button type="button" className="ide-cta" onClick={() => void generate()} disabled={busy}>
+                Run research
+              </button>
+            </div>
+          )}
           <div className="ide-compose">
             <input
               aria-label="Your reply"
@@ -262,9 +320,6 @@ export function BrainStorm({
             />
             <button onClick={() => void send()} disabled={busy || !input.trim()}>
               Send
-            </button>
-            <button type="button" onClick={() => void generate()} disabled={busy}>
-              Generate opportunities
             </button>
             <button type="button" onClick={reset} disabled={busy}>
               New brain-storm

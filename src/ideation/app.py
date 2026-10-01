@@ -332,6 +332,10 @@ def _bs_state(session) -> dict:  # type: ignore[no-untyped-def]
         "problem": session.problem,
         "turn_count": session.turn_count,
         "max_turns": QUALIFIER_MAX_TURNS,
+        "ready": session.ready,
+        "at_ceiling": session.turn_count >= QUALIFIER_MAX_TURNS,
+        "brief": session.brief,
+        "gaps": session.gaps,
         "created_at": session.created_at,
         "failure_reason": session.failure_reason,
     }
