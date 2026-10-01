@@ -294,6 +294,48 @@ _init_repo "clean" "clean"
 _run dev
 _assert_exit "clean run unaffected" 0
 
+# 8. Registry race (option (b)): head and base lockfiles are byte-identical
+#    but the two audit calls disagree. The stub keys its output off a
+#    counter-based override file: the first audit (head) sees the advisory,
+#    the base-side call sees clean. Must fail closed (exit 2, inconclusive),
+#    never "pre-existing" and never silently pass.
+_init_repo "vuln-a" "vuln-a"
+cat > "$STUB_DIR/pnpm" <<'STUB'
+#!/usr/bin/env sh
+if [ "$1" = "audit" ]; then
+  case "$PWD" in
+    *js-dependency-audit-base.*) cat "$STUB_DIR_ENV/output-clean.json" ;;
+    *) cat "$STUB_DIR_ENV/output-vuln-a.json" ;;
+  esac
+  exit 0
+fi
+exit 99
+STUB
+_run dev
+_assert_exit "identical lockfiles, audits disagree -- inconclusive, blocks" 2
+_assert_output_contains "race case says inconclusive" "INCONCLUSIVE"
+
+# 9. Base-side call unstable across two calls (first reports the advisory,
+#    re-check does not): must not be trusted as "pre-existing".
+_init_repo "clean" "vuln-a"
+cat > "$STUB_DIR/pnpm" <<'STUB'
+#!/usr/bin/env sh
+if [ "$1" = "audit" ]; then
+  case "$PWD" in
+    *js-dependency-audit-base.*)
+      n=$(cat "$STUB_DIR_ENV/count" 2>/dev/null || echo 0)
+      echo $((n + 1)) >"$STUB_DIR_ENV/count"
+      if [ "$n" -eq 0 ]; then cat "$STUB_DIR_ENV/output-vuln-a.json"; else cat "$STUB_DIR_ENV/output-clean.json"; fi ;;
+    *) cat "$STUB_DIR_ENV/output-vuln-a.json" ;;
+  esac
+  exit 0
+fi
+exit 99
+STUB
+rm -f "$STUB_DIR/count"
+_run dev
+_assert_exit "unstable base answer -- inconclusive, blocks" 2
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "js-dependency-audit-classification.test.sh: all checks passed."
