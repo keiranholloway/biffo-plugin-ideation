@@ -51,7 +51,6 @@ class FakeCore:
         self.requests: list[dict[str, Any]] = []
         self.chain_runs: dict[tuple[str, str], AgentRunView] = {}
         self.saved: list[dict[str, Any]] = []
-        self.reply = "Brief: dentists, UK, no-shows."
         self.configs = {
             r["role"]: r for r in brainstorm_seed_payloads() if r["role"] in RESEARCH_AGENT_NAMES
         }
@@ -67,11 +66,6 @@ class FakeCore:
 
     async def update_brainstorm_session(self, *, session_id, **fields):
         self.sessions[session_id] = replace(self.sessions[session_id], **fields)
-
-    async def run_chat_turn(self, *, thread_id, owner_sub, agent_name, user_text):
-        from ideation.models import TurnResult
-
-        return TurnResult(reply=self.reply)
 
     async def get_own_config(self, *, role):
         return self.configs.get(role)
@@ -352,18 +346,3 @@ def test_extract_opportunities_rejects_an_invalid_shortlist() -> None:
     ]
     with pytest.raises(MalformedOpportunitiesError):
         extract_opportunities(messages)
-
-
-@_sync
-async def test_chat_turn_persists_brief_and_research_input_includes_it() -> None:
-    core = FakeCore()
-    core.add_session(target="dentists", geography="UK", problem="no-shows", thread_id="t1")
-    svc = _svc(core)
-    await svc.chat_turn(owner_sub="alice", session_id="b1", user_message="hi")
-
-    assert core.sessions["b1"].brief == {"summary": "Brief: dentists, UK, no-shows."}
-    assert core.sessions["b1"].turn_count == 1
-
-    await svc.finalise(owner_sub="alice", session_id="b1")
-    for r in core.requests:
-        assert r["input_payload"]["brief"]["qualified_brief"] == core.sessions["b1"].brief

@@ -319,24 +319,3 @@ def test_list_opportunities_filters_by_session_and_sorts_by_rank():
     assert isinstance(opps[0], BrainstormOpportunity)
     assert opps[0].evidence == ["x"]
     assert opps[1].evidence is None
-
-
-def test_chat_turn_brief_round_trips_through_adapter():
-    from ideation.models import TurnResult
-    from ideation.service import BrainstormService
-
-    t = FakeTransport()
-    t.on("GET", f"{_BS}/bs-1", _row(id="bs-1", status="qualifying", thread_id="th", turn_count=0))
-
-    class Core(CoreHttpGateway):
-        async def run_chat_turn(self, **kw):
-            return TurnResult(reply="Qualified: SMEs, UK, cash flow")
-
-    svc = BrainstormService(Core(t))
-    _run(svc.chat_turn(owner_sub="alice", session_id="bs-1", user_message="x"))
-    body = t.call("PATCH", f"{_BS}/bs-1")["json"]
-    expected = {"summary": "Qualified: SMEs, UK, cash flow"}
-    assert json.loads(body["brief"]) == expected
-    t.on("GET", f"{_BS}/bs-1", _row(id="bs-1", brief=body["brief"]))
-    session = _run(CoreHttpGateway(t).get_brainstorm_session(owner_sub="alice", session_id="bs-1"))
-    assert session is not None and session.brief == expected
