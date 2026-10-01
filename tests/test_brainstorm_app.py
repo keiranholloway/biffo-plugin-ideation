@@ -86,6 +86,7 @@ def test_start_session_runs_the_opening_qualifier_turn(client, core):
     assert body["status"] == BS_QUALIFYING
     assert body["turn_count"] == 1
     assert body["max_turns"] == QUALIFIER_MAX_TURNS
+    assert body["early_research_turn"] == 3
     assert body["target"] == "dentists"
     assert core.turns[0]["agent_name"] == QUALIFIER_AGENT_NAME
     assert "dentists" in core.turns[0]["text"] and "UK" in core.turns[0]["text"]

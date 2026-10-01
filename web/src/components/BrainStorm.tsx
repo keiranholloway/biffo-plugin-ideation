@@ -77,6 +77,12 @@ export function BrainStorm({
   const atCeiling = !!session && (session.at_ceiling ?? session.turn_count >= session.max_turns)
   const showRun = !!session && (!!session.ready || atCeiling)
   const gaps = session?.gaps ?? session?.brief?.gaps ?? []
+  const showEarly =
+    !!session &&
+    !showRun &&
+    session.status === 'qualifying' &&
+    session.early_research_turn !== undefined &&
+    session.turn_count >= session.early_research_turn
 
   const canStart = !!(target.trim() || geography.trim() || problem.trim())
 
@@ -307,6 +313,23 @@ export function BrainStorm({
               )}
               <button type="button" className="ide-cta" onClick={() => void generate()} disabled={busy}>
                 Run research
+              </button>
+            </div>
+          )}
+          {showEarly && (
+            <div className="ide-early" role="region" aria-label="Early research">
+              {gaps.length > 0 && (
+                <>
+                  <p>Research will lack these details:</p>
+                  <ul className="ide-gaps" aria-label="Current gaps">
+                    {gaps.map((g, i) => (
+                      <li key={i}>{g}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <button type="button" onClick={() => void generate()} disabled={busy}>
+                Brainstorm with what I've given so far
               </button>
             </div>
           )}

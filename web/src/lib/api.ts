@@ -100,6 +100,7 @@ export interface BrainstormState {
   problem: string | null
   turn_count: number
   max_turns: number
+  early_research_turn?: number
   ready?: boolean
   at_ceiling?: boolean
   brief?: BrainstormBrief | null

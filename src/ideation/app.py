@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from .adapter import CoreHttpError, CoreHttpGateway
 from .brainstorm_definitions import (
+    QUALIFIER_EARLY_RESEARCH_TURN,
     QUALIFIER_MAX_TURNS,
     brainstorm_seed_payloads,
     brainstorm_workflow_definitions,
@@ -364,6 +365,7 @@ def _bs_state(session) -> dict:  # type: ignore[no-untyped-def]
         "problem": session.problem,
         "turn_count": session.turn_count,
         "max_turns": QUALIFIER_MAX_TURNS,
+        "early_research_turn": QUALIFIER_EARLY_RESEARCH_TURN,
         "ready": session.ready,
         "at_ceiling": session.turn_count >= QUALIFIER_MAX_TURNS,
         "brief": session.brief,
