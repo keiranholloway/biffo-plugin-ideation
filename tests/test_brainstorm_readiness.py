@@ -119,7 +119,7 @@ def test_finalise_passes_structured_brief_to_all_six_research_agents() -> None:
 
 def test_qualifier_ceiling_is_separate_from_pressure_test_cap() -> None:
     assert definitions.MAX_TURNS == 5
-    assert 15 <= QUALIFIER_MAX_TURNS <= 20
+    assert QUALIFIER_MAX_TURNS == 8
     assert QUALIFIER_MAX_TURNS != definitions.MAX_TURNS
 
 
@@ -138,3 +138,15 @@ def test_ceiling_stops_the_chat_but_not_research() -> None:
 
 def test_parse_without_block_returns_none() -> None:
     assert parse_brief_state("just prose") == ("just prose", None)
+
+
+def test_qualifier_prompt_mentions_early_option_and_ceiling():
+    from src.ideation.brainstorm_definitions import (
+        QUALIFIER_EARLY_RESEARCH_TURN,
+        QUALIFIER_INSTRUCTIONS,
+    )
+
+    assert QUALIFIER_EARLY_RESEARCH_TURN == 3
+    assert "what I've given so far" in QUALIFIER_INSTRUCTIONS
+    assert "ceiling of\n8 exchanges" in QUALIFIER_INSTRUCTIONS
+    assert "<brief_state>" in QUALIFIER_INSTRUCTIONS

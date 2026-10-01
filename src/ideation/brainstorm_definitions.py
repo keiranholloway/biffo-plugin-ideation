@@ -24,7 +24,11 @@ QUALIFIER_AGENT_NAME = "ideation-brainstorm-qualifier"
 
 #: The qualifying chat's own safety ceiling. Deliberately NOT ``definitions.MAX_TURNS``
 #: (Pressure Test's cap, 5): converging on the A/B/C brief takes longer than that.
-QUALIFIER_MAX_TURNS = 18
+QUALIFIER_MAX_TURNS = 8
+
+#: From this turn the founder may skip ahead and research with the partial brief
+#: (a secondary UI action; the server enforces no minimum). Exposed in session state.
+QUALIFIER_EARLY_RESEARCH_TURN = 3
 
 #: Machine-readable readiness signal. Every qualifier reply ends with one
 #: ``<brief_state>{json}</brief_state>`` block; the plugin parses and validates
@@ -113,10 +117,14 @@ Each turn, briefly do TWO things:
 1. Reflect back what you have understood so far.
 2. Ask ONE focused question about the most important thing still unclear.
 
-Keep going for as many turns as it takes — there is no short fixed limit — but
-the conversation has a hard ceiling of {QUALIFIER_MAX_TURNS} exchanges. If you
+Keep going until the brief is clear, but the conversation has a hard ceiling of
+{QUALIFIER_MAX_TURNS} exchanges. If you
 are at or near that ceiling, summarise what you have and name the gaps plainly,
 so the founder can still go on to research knowingly. Never just stop.
+
+From turn {QUALIFIER_EARLY_RESEARCH_TURN} onward, tell the founder ONCE (not on every turn)
+that they can go ahead and brainstorm with what they have given so far, using the
+"Brainstorm with what I've given so far" button, then carry on qualifying as normal.
 
 When A, B and C are clear enough to research, SAY SO in plain words, give the
 founder a structured summary of the brief, and tell them to press "Run research"

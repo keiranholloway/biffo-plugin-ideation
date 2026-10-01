@@ -100,11 +100,46 @@ describe('BrainStorm "Run research" call to action', () => {
     await startWith({
       ready: false,
       at_ceiling: true,
-      turn_count: 18,
-      max_turns: 18,
+      turn_count: 8,
+      max_turns: 8,
       gaps: ['Budget unknown'],
     })
     expect(screen.getByRole('button', { name: 'Run research' })).toBeInTheDocument()
     expect(screen.getByText('Budget unknown')).toBeInTheDocument()
+  })
+})
+
+describe('BrainStorm early research option', () => {
+  async function startWith(extra: Record<string, unknown>) {
+    const api = {
+      startBrainstorm: vi
+        .fn()
+        .mockResolvedValue({ ...state, status: 'qualifying', reply: 'Q?', early_research_turn: 3, ...extra }),
+      finaliseBrainstorm: vi.fn().mockResolvedValue({ ...state, status: 'researching' }),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.change(screen.getByLabelText('Target company or industry'), { target: { value: 'clinics' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start brain-storm/ }))
+    await waitFor(() => expect(screen.getByText('Q?')).toBeInTheDocument())
+    return api
+  }
+  const early = /Brainstorm with what I've given so far/
+
+  it('is hidden at turns 1 and 2', async () => {
+    await startWith({ turn_count: 2, gaps: ['Budget'] })
+    expect(screen.queryByRole('button', { name: early })).toBeNull()
+  })
+
+  it('shows at turn 3 with gaps and calls finalise', async () => {
+    const api = await startWith({ turn_count: 3, gaps: ['Budget unknown'] })
+    expect(screen.getByText('Budget unknown')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: early }))
+    await waitFor(() => expect(api.finaliseBrainstorm).toHaveBeenCalledWith('s1'))
+  })
+
+  it('is hidden once the full panel shows', async () => {
+    await startWith({ turn_count: 4, ready: true })
+    expect(screen.queryByRole('button', { name: early })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Run research' })).toBeInTheDocument()
   })
 })
