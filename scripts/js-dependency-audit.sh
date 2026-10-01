@@ -286,6 +286,55 @@ audit_dir() {
           fi
         fi
 
+        # Registry-race guard (option (b), owner decision on the #188/#190
+        # incident). The base-side audit is a SECOND live-registry call, so
+        # it can disagree with the head-side call purely because the
+        # registry's advisory DB is still propagating a fresh CVE -- in
+        # either direction -- and a false "pre-existing" read lets a real
+        # advisory through the required gate. Two detectable disagreements
+        # are treated as INCONCLUSIVE and BLOCK, never trusted:
+        #   1. The head and base lockfiles are byte-identical, yet the two
+        #      audits returned different advisory-ID sets. Identical input
+        #      cannot legitimately differ; the registry moved between calls.
+        #   2. Two base-side audit calls, made a moment apart, disagree with
+        #      each other (the base answer is not stable, so it cannot be
+        #      used to call anything pre-existing).
+        race_detected=0
+        if [ "$base_available" -eq 1 ]; then
+          head_lock_content="$(cat "$dir/pnpm-lock.yaml" 2>/dev/null)"
+          base_lock_content="$(git show "${BASE_REMOTE_REF}:${lock_rel}" 2>/dev/null)"
+          if [ -n "$base_lock_content" ] && [ "$head_lock_content" = "$base_lock_content" ]; then
+            head_all_ids="$(mktemp)"
+            printf '%s' "$out" | jq -r '.advisories[]? | (.github_advisory_id // (.id|tostring))' 2>/dev/null | sort -u >"$head_all_ids"
+            if ! sort -u "$base_ids_file" | cmp -s - "$head_all_ids"; then
+              race_detected=1
+              echo "::error::${label}: head and ${BASE_REMOTE_REF} lockfiles are byte-identical, but their audits returned different advisory sets — the registry answered inconsistently (likely still propagating a just-published advisory)."
+            fi
+            rm -f "$head_all_ids"
+          fi
+          if [ "$race_detected" -eq 0 ]; then
+            recheck_ids="$(mktemp)"
+            base_sorted="$(mktemp)"
+            sort -u "$base_ids_file" >"$base_sorted"
+            if _base_advisory_ids "$lock_rel" >"$recheck_ids.raw" 2>/dev/null \
+              && sort -u "$recheck_ids.raw" >"$recheck_ids" \
+              && cmp -s "$base_sorted" "$recheck_ids"; then
+              :
+            else
+              race_detected=1
+              echo "::error::${label}: two base-branch audit calls of ${lock_rel} disagreed (or the re-check could not run) — the base-side answer is unstable, so it cannot be trusted to classify anything as pre-existing."
+            fi
+            rm -f "$recheck_ids" "$recheck_ids.raw" "$base_sorted"
+          fi
+        fi
+        if [ "$race_detected" -eq 1 ]; then
+          rm -f "$findings_file"
+          [ -n "$base_ids_file" ] && rm -f "$base_ids_file"
+          echo "::error::${label}: pre-existing-vs-introduced classification is INCONCLUSIVE (base/head registry disagreement) and BLOCKS — a required gate fails closed rather than risk waving a real advisory through; re-run once the registry settles (#2040 follow-up)."
+          echo "inconclusive" >"$resultfile"
+          return 0
+        fi
+
         introduced_count=0
         preexisting_count=0
         while IFS="$(printf '\t')" read -r f_id f_sev f_mod; do
