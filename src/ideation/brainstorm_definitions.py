@@ -103,7 +103,8 @@ def parse_completed_brief(reply: str) -> tuple[str, dict[str, str] | None]:
 # agent told to use a tool that is not there). One synthesis agent then reconciles
 # their findings into ranked opportunities. The fan-in join between them is the
 # orchestration engine's ``agent_fan_in`` action, seeded by
-# ``scripts/seed_brainstorm_fan_in_workflow.py``.
+# :func:`brainstorm_fan_in_definition`, which the plugin declares to Core on every
+# startup via ``POST /internal/plugins/me/workflows/seed`` (upsert).
 
 PAIN_AGENT_NAME = "ideation-brainstorm-pain"
 MARKET_AGENT_NAME = "ideation-brainstorm-market"
@@ -374,3 +375,46 @@ def brainstorm_seed_payloads() -> list[dict[str, Any]]:
         *(row(name, DEFAULT_RESEARCH_MODEL) for name in RESEARCH_AGENT_NAMES),
         row(SYNTHESIS_AGENT_NAME, DEFAULT_SYNTHESIS_MODEL),
     ]
+
+
+# ── fan-in workflow declaration ──────────────────────────────────────────────
+
+#: Stable upsert key for the fan-in workflow. Core keys the stored row on this
+#: (scoped to this plugin), so it must never change: a new key would leave the
+#: old definition behind and create a second one.
+FAN_IN_DEFINITION_KEY = "ideation-brainstorm-fan-in"
+
+WORKFLOW_NAME = "Brain-Storming — synthesise once research completes"
+
+
+def brainstorm_fan_in_definition() -> dict:
+    """The workflow this plugin needs in order to finish a run on its own.
+
+    **Without it a session never leaves ``researching``**: the six research agents
+    still run and bill and nothing reconciles them.
+
+    Triggered by every ``agent.run.completed``: the ``agent_fan_in`` action decides
+    whether the event belongs to a chain it cares about, and no-ops otherwise (its
+    all-siblings-terminal check collapses the six completions into one firing).
+
+    Carries no ``instructions`` and no ``model``: Core resolves both from the
+    plugin's seeded config at agent-run creation, so admin edits take effect.
+    """
+    return {
+        "definition_key": FAN_IN_DEFINITION_KEY,
+        "name": WORKFLOW_NAME,
+        "trigger_source": "biffo.core",
+        "trigger_detail_type": "agent.run.completed",
+        "action_type": "agent_fan_in",
+        "action_config": {
+            "expect_agents": ",".join(RESEARCH_AGENT_NAMES),
+            "agent_name": SYNTHESIS_AGENT_NAME,
+            "max_turns": SYNTHESIS_MAX_TURNS,
+        },
+        "enabled": True,
+    }
+
+
+def brainstorm_workflow_definitions() -> list[dict]:
+    """Every workflow definition this plugin declares at startup."""
+    return [brainstorm_fan_in_definition()]
