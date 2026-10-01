@@ -20,12 +20,9 @@ name: Release
 #
 # ## Registry publishing is NOT done here
 #
-# `publish-registry.yml` owns that, triggered by a change to
-# `biffo.plugin.json` on `dev` — i.e. when the version is *merged*, not when it
-# is tagged. Deliberately separate: the marketplace should reflect what is on
-# `dev`, and tagging is an independent decision. (A weekly pull-based sync in
-# the registry repo also re-derives every entry from this manifest, so the store
-# converges even with no token configured. See biffo-plugins-registry#4.)
+# The plugin registry picks up changes to `biffo.plugin.json` through its own
+# hourly pull sync (`sync-plugins.yml` in biffo-plugins-registry); this repo
+# holds no cross-repo credential. See biffo-plugins-registry#4.
 #
 # ## PyPI publishing is opt-in
 #
