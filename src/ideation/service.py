@@ -190,6 +190,13 @@ class IdeationService:
         :class:`SessionNotFoundError` for a missing or non-owned session."""
         return await self._load_owned(owner_sub=owner_sub, session_id=session_id)
 
+    async def get_messages(self, *, owner_sub: str, session_id: str) -> list[dict[str, str]]:
+        """The visible transcript of the founder's own session."""
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.thread_id is None:
+            return []
+        return visible_turns(await self._core.get_thread_messages(thread_id=session.thread_id))
+
     async def list_sessions(self, *, owner_sub: str) -> list[Session]:
         """The founder's sessions, most-recent-first. Soft-deleted sessions are excluded."""
         sessions = await self._core.list_sessions(owner_sub=owner_sub)
@@ -327,6 +334,24 @@ class MalformedOpportunitiesError(IdeationError):
     the service and recorded as a failed *session*, not raised to the caller."""
 
 
+def visible_turns(raw: list[dict[str, Any]], *, strip_brief_state: bool = False) -> list[dict[str, str]]:
+    """The user/assistant turns of a stored thread that a founder saw: tool,
+    system and empty messages are dropped, and (Brain-Storm) the hidden
+    ``<brief_state>`` block is stripped exactly as live replies are."""
+    turns: list[dict[str, str]] = []
+    for m in raw:
+        role = m.get("role")
+        content = m.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        if role == "assistant" and strip_brief_state:
+            content, _ = parse_brief_state(content)
+        if not content.strip():
+            continue
+        turns.append({"role": role, "content": content})
+    return turns
+
+
 def extract_opportunities(run_messages: list[dict[str, Any]]) -> OpportunitySet:
     """Pull the ranked shortlist out of the synthesis run's transcript (the last
     call to the output tool — a retried malformed call supersedes the earlier one).
@@ -412,6 +437,15 @@ class BrainstormService:
         return await self._core.list_brainstorm_opportunities(
             owner_sub=owner_sub, session_id=session_id
         )
+
+    async def get_messages(self, *, owner_sub: str, session_id: str) -> list[dict[str, str]]:
+        """The visible transcript of the founder's own brain-storm, with the
+        ``<brief_state>`` block stripped from assistant turns."""
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.thread_id is None:
+            return []
+        raw = await self._core.get_thread_messages(thread_id=session.thread_id)
+        return visible_turns(raw, strip_brief_state=True)
 
     async def list_sessions(self, *, owner_sub: str) -> list[BrainstormSession]:
         """The founder's sessions, most-recent-first, soft-deleted excluded."""

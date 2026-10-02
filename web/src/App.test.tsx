@@ -203,6 +203,35 @@ describe('App', () => {
     })
   })
 
+  it('restores the stored transcript when reopening a gathering session', async () => {
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    const sessionList = [
+      { session_id: 's1', title: 'In progress', status: 'gathering' as const, created_at: '2026-07-25T10:00:00Z' },
+    ]
+    const json = (body: unknown) =>
+      ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }) as Response
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/v1/plugins/ideation/sessions') return json(sessionList)
+      if (url === '/api/v1/plugins/ideation/sessions/s1')
+        return json({ session_id: 's1', status: 'gathering', turn_count: 1, min_turns: 3, max_turns: 5, can_finalise: false })
+      if (url === '/api/v1/plugins/ideation/sessions/s1/messages')
+        return json({
+          messages: [
+            { role: 'user', content: 'My idea about dogs' },
+            { role: 'assistant', content: 'Why now?' },
+          ],
+        })
+      return json({})
+    })
+
+    await renderPressureTest()
+    fireEvent.click(await screen.findByText('In progress'))
+
+    await waitFor(() => expect(screen.getByText('My idea about dogs')).toBeInTheDocument())
+    expect(screen.getByText('Why now?')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(COMPOSER_PLACEHOLDER)).toBeInTheDocument()
+  })
+
   it('shows the seed form when clicking + New idea', async () => {
     const mockSession = createMockSession()
     vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(mockSession)

@@ -7,6 +7,7 @@ import {
   type BrainstormBrief,
   type BrainstormOpportunity,
   type BrainstormState,
+  type TranscriptMessage,
 } from '../lib/api'
 
 interface Msg {
@@ -25,6 +26,23 @@ const MAX_GEOGRAPHY = 4_000
 const MAX_PROBLEM = 8_000
 
 const POLL_MS = 3000
+
+function toMsgs(turns: TranscriptMessage[]): Msg[] {
+  return turns.map((t) => ({ role: t.role === 'user' ? 'you' : 'ideation', text: t.content }))
+}
+
+function Transcript({ messages }: { messages: Msg[] }) {
+  return (
+    <ul className="ide-messages">
+      {messages.map((m, i) => (
+        <li key={i} className={`ide-msg ide-msg--${m.role}`}>
+          <span className="ide-who">{m.role === 'you' ? 'You' : 'Ideation'}</span>
+          <p>{m.text}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 function BriefDetails({ brief }: { brief?: BrainstormBrief | null }) {
   if (!brief) return null
@@ -54,6 +72,10 @@ function BriefDetails({ brief }: { brief?: BrainstormBrief | null }) {
   )
 }
 
+function historyTitle(s: BrainstormState): string {
+  return s.title || s.target || s.problem || s.geography || 'Untitled brain-storm'
+}
+
 export function BrainStorm({
   api,
   onPressureTest,
@@ -70,6 +92,9 @@ export function BrainStorm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [opportunities, setOpportunities] = useState<BrainstormOpportunity[]>([])
+  const [history, setHistory] = useState<BrainstormState[]>([])
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [historyFailed, setHistoryFailed] = useState(false)
 
   const isChatting =
     !!session && !['researching', 'synthesising', 'complete', 'failed'].includes(session.status)
@@ -85,6 +110,56 @@ export function BrainStorm({
     session.turn_count >= session.early_research_turn
 
   const canStart = !!(target.trim() || geography.trim() || problem.trim())
+
+  async function loadHistory() {
+    try {
+      const list = await api.listBrainstorms()
+      setHistory(Array.isArray(list) ? list : [])
+      setHistoryFailed(false)
+    } catch {
+      setHistoryFailed(true)
+    } finally {
+      setHistoryLoaded(true)
+    }
+  }
+
+  // The history list is shown on the intake view; refresh it whenever we land there.
+  const hasSession = session !== null
+  useEffect(() => {
+    if (!hasSession) void loadHistory()
+  }, [api, hasSession])
+
+  async function open(summary: BrainstormState) {
+    setBusy(true)
+    setError(null)
+    try {
+      // A fresh read: it also advances a researching/synthesising session.
+      const state = await api.getBrainstorm(summary.session_id)
+      const t = await api.getBrainstormMessages(summary.session_id)
+      let opps: BrainstormOpportunity[] = []
+      if (state.status === 'complete') {
+        opps = (await api.getBrainstormOpportunities(summary.session_id)).opportunities
+      }
+      setMessages(toMsgs(t.messages))
+      setOpportunities(opps)
+      setInput('')
+      setSession(state)
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove(summary: BrainstormState) {
+    if (!window.confirm(`Delete "${historyTitle(summary)}"? This can't be undone from here.`)) return
+    try {
+      await api.deleteBrainstorm(summary.session_id)
+      await loadHistory()
+    } catch (e) {
+      setError(errorText(e))
+    }
+  }
 
   async function start() {
     if (!canStart) return
@@ -232,6 +307,50 @@ export function BrainStorm({
         </div>
       )}
 
+      {!session && (
+        <div className="ide-history">
+          <h2>Your past brain-storms</h2>
+          {historyFailed && history.length === 0 ? (
+            <p role="status">Couldn&apos;t load your past brain-storms</p>
+          ) : !historyLoaded ? (
+            <p role="status">Loading your past brain-storms…</p>
+          ) : history.length === 0 ? (
+            <p>No past brain-storms yet</p>
+          ) : (
+            <ul className="ide-history-list">
+              {history.map((h) => (
+                <li key={h.session_id} className="ide-history-row">
+                  <button type="button" className="ide-history-item" onClick={() => void open(h)} disabled={busy}>
+                    <span className="ide-history-title">{historyTitle(h)}</span>
+                    <span className="ide-history-status">{h.status}</span>
+                    <span className="ide-history-date">
+                      {h.created_at ? new Date(h.created_at).toLocaleDateString() : ''}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ide-history-delete"
+                    aria-label={`Delete ${historyTitle(h)}`}
+                    onClick={() => void remove(h)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {session && !isChatting && (
+        <div className="ide-brief ide-brief--readonly">
+          {session.brief?.summary && <p>{session.brief.summary}</p>}
+          <BriefDetails brief={session.brief} />
+        </div>
+      )}
+
+      {session && !isChatting && messages.length > 0 && <Transcript messages={messages} />}
+
       {session && (status === 'researching' || status === 'synthesising') && (
         <div className="ide-progress" role="status">
           <p>
@@ -288,14 +407,7 @@ export function BrainStorm({
 
       {session && isChatting && (
         <div className="ide-chat">
-          <ul className="ide-messages">
-            {messages.map((m, i) => (
-              <li key={i} className={`ide-msg ide-msg--${m.role}`}>
-                <span className="ide-who">{m.role === 'you' ? 'You' : 'Ideation'}</span>
-                <p>{m.text}</p>
-              </li>
-            ))}
-          </ul>
+          <Transcript messages={messages} />
           {showRun && (
             <div className="ide-brief" role="region" aria-label="Brief summary">
               <h2>{session.ready ? 'Your brief is ready' : 'Conversation limit reached'}</h2>

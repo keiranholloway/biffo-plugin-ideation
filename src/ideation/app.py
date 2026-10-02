@@ -293,6 +293,16 @@ async def send_message(
     return {"reply": turn.reply, **_state(state)}
 
 
+@app.get("/sessions/{session_id}/messages")
+async def read_session_messages(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: IdeationService = Depends(get_service),
+) -> dict:
+    """The visible transcript of a Pressure Test session, to restore on reopen."""
+    return {"messages": await svc.get_messages(owner_sub=founder.sub, session_id=session_id)}
+
+
 @app.get("/sessions/{session_id}")
 async def read_session(
     session_id: str,
@@ -432,6 +442,16 @@ async def send_brainstorm_message(
     )
     state = await svc.get_session(owner_sub=founder.sub, session_id=session_id)
     return {"reply": turn.reply, **_bs_state(state)}
+
+
+@app.get("/brainstorm/sessions/{session_id}/messages")
+async def read_brainstorm_messages(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """The visible transcript of a brain-storm (brief_state block stripped)."""
+    return {"messages": await svc.get_messages(owner_sub=founder.sub, session_id=session_id)}
 
 
 @app.get("/brainstorm/sessions/{session_id}")
