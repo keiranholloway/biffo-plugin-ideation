@@ -143,3 +143,72 @@ describe('BrainStorm early research option', () => {
     expect(screen.getByRole('button', { name: 'Run research' })).toBeInTheDocument()
   })
 })
+
+describe('BrainStorm history', () => {
+  const past = [
+    { ...state, session_id: 'a', status: 'qualifying', title: 'Clinics', created_at: '2026-10-01T10:00:00Z' },
+    { ...state, session_id: 'b', status: 'complete', title: 'Vets', created_at: '2026-09-01T10:00:00Z' },
+  ]
+
+  it('lists past brain-storms from the API', async () => {
+    const api = { listBrainstorms: vi.fn().mockResolvedValue(past) } as unknown as Api
+    render(<BrainStorm api={api} />)
+    await waitFor(() => expect(screen.getByText('Clinics')).toBeInTheDocument())
+    expect(screen.getByText('Vets')).toBeInTheDocument()
+    expect(screen.getByText('qualifying')).toBeInTheDocument()
+  })
+
+  it('reopens a qualifying session with its transcript and lets the next message send', async () => {
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue(past),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...past[0], turn_count: 2 }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({
+        messages: [
+          { role: 'user', content: 'Target: clinics' },
+          { role: 'assistant', content: 'Who pays?' },
+        ],
+      }),
+      sendBrainstormMessage: vi.fn().mockResolvedValue({ ...past[0], turn_count: 3, reply: 'Got it' }),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByText('Clinics'))
+    await waitFor(() => expect(screen.getByText('Who pays?')).toBeInTheDocument())
+    expect(screen.getByText('Target: clinics')).toBeInTheDocument()
+    expect(screen.getByText(/turn 2 \/ 8/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Your reply'), { target: { value: 'The owner' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(screen.getByText('Got it')).toBeInTheDocument())
+    expect(api.sendBrainstormMessage).toHaveBeenCalledWith('a', 'The owner')
+  })
+
+  it('reopens a complete session with brief, transcript and opportunities', async () => {
+    const opp = { id: 'o1', rank: 1, title: 'Slot filler', pitch: 'Fill no-shows', rationale: null, evidence: [] }
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue(past),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...past[1], brief: { summary: 'Vet brief summary' } }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({
+        messages: [{ role: 'assistant', content: 'Earlier question' }],
+      }),
+      getBrainstormOpportunities: vi.fn().mockResolvedValue({ opportunities: [opp] }),
+    } as unknown as Api
+    render(<BrainStorm api={api} onPressureTest={vi.fn()} />)
+    fireEvent.click(await screen.findByText('Vets'))
+    await waitFor(() => expect(screen.getByText('Slot filler')).toBeInTheDocument())
+    expect(screen.getByText('Vet brief summary')).toBeInTheDocument()
+    expect(screen.getByText('Earlier question')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pressure-test this' })).toBeInTheDocument()
+  })
+
+  it('deletes from the history list', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValueOnce(past).mockResolvedValue([past[1]]),
+      deleteBrainstorm: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Clinics' }))
+    await waitFor(() => expect(api.deleteBrainstorm).toHaveBeenCalledWith('a'))
+    await waitFor(() => expect(screen.queryByText('Clinics')).not.toBeInTheDocument())
+  })
+})

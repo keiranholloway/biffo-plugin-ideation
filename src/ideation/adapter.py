@@ -216,6 +216,10 @@ class CoreHttpGateway:
             cost_usd=resp.get("cost_usd"),
         )
 
+    async def get_thread_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
+        resp = await self._t.request("GET", f"{_AGENT_RUNS}/threads/{thread_id}/messages")
+        return list(resp.get("messages", []))
+
     async def request_analysis(
         self,
         *,

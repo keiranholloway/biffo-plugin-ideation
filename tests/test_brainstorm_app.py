@@ -26,6 +26,10 @@ class FakeCore:
         self.sessions: dict[str, BrainstormSession] = {}
         self.turns: list[dict[str, Any]] = []
         self._seq = 0
+        self.threads: dict[str, list[dict[str, Any]]] = {}
+
+    async def get_thread_messages(self, *, thread_id):
+        return list(self.threads.get(thread_id, []))
 
     async def create_brainstorm_session(
         self, *, owner_sub, target, geography, problem, thread_id, title=None
@@ -157,3 +161,30 @@ def test_opportunities_route_is_empty_for_a_fresh_session(client, core):
 
 def test_opportunities_route_404s_for_unknown_session(client):
     assert client.get("/brainstorm/sessions/nope/opportunities").status_code == 404
+
+
+def test_messages_route_returns_owner_thread_and_strips_brief_state(client, core):
+    sid = client.post("/brainstorm/sessions", json={"target": "clinics"}).json()["session_id"]
+    thread = core.sessions[sid].thread_id
+    core.threads[thread] = [
+        {"role": "system", "content": "secret prompt"},
+        {"role": "user", "content": "Target: clinics"},
+        {
+            "role": "assistant",
+            "content": 'Who pays?\n<brief_state>{"ready": false, "gaps": ["x"]}</brief_state>',
+        },
+        {"role": "assistant", "content": None, "tool_calls": []},
+    ]
+    core.threads["other-thread"] = [{"role": "user", "content": "not yours"}]
+    r = client.get(f"/brainstorm/sessions/{sid}/messages")
+    assert r.status_code == 200
+    assert r.json()["messages"] == [
+        {"role": "user", "content": "Target: clinics"},
+        {"role": "assistant", "content": "Who pays?"},
+    ]
+
+
+def test_messages_route_404s_for_another_owners_session(client, core):
+    sid = client.post("/brainstorm/sessions", json={"target": "clinics"}).json()["session_id"]
+    core.sessions[sid] = replace(core.sessions[sid], owner_sub="bob")
+    assert client.get(f"/brainstorm/sessions/{sid}/messages").status_code == 404

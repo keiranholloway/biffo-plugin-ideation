@@ -188,6 +188,10 @@ class CoreGateway(Protocol):
         run — the caller treats that as a failure, not "still running"."""
         ...
 
+    async def get_thread_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
+        """The raw stored messages of a chat thread, oldest first."""
+        ...
+
     # ── Brain-Storming: sessions and opportunities ───────────────────────────
 
     async def create_brainstorm_session(

@@ -80,6 +80,11 @@ export interface SessionSummary {
   created_at: string
 }
 
+export interface TranscriptMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface Agent {
   agent_key: string
   agent_name: string
@@ -165,6 +170,7 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
       const detail = await res.text().catch(() => res.statusText)
       throw new ApiError(res.status, detail)
     }
+    if (res.status === 204) return undefined as T
     return res.json() as Promise<T>
   }
 
@@ -184,6 +190,12 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
     listSessions: () => request<SessionSummary[]>('GET', '/sessions'),
     getSubmittedIdea: () => request<{ idea: string | null }>('GET', '/submitted-idea'),
     getAgents: () => request<Agent[]>('GET', '/agents'),
+    getSessionMessages: (id: string) =>
+      request<{ messages: TranscriptMessage[] }>('GET', `/sessions/${id}/messages`),
+    listBrainstorms: () => request<BrainstormState[]>('GET', '/brainstorm/sessions'),
+    getBrainstormMessages: (id: string) =>
+      request<{ messages: TranscriptMessage[] }>('GET', `/brainstorm/sessions/${id}/messages`),
+    deleteBrainstorm: (id: string) => request<void>('POST', `/brainstorm/sessions/${id}/delete`),
     startBrainstorm: (intake: BrainstormIntake) =>
       request<BrainstormTurn>('POST', '/brainstorm/sessions', intake),
     sendBrainstormMessage: (id: string, message: string) =>

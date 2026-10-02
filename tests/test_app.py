@@ -67,6 +67,9 @@ class FakeCore:
     async def request_agent_run(self, **_: Any) -> str:
         raise NotImplementedError
 
+    async def get_thread_messages(self, **_: Any) -> Any:
+        raise NotImplementedError
+
     async def find_chain_run(self, **_: Any) -> Any:
         raise NotImplementedError
 

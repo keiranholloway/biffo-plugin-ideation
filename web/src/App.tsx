@@ -215,7 +215,18 @@ export default function App() {
       try {
         const sessionState = await api!.getSession(clicked.session_id)
         setSession(sessionState)
-        setMessages([])
+        try {
+          const t = await api!.getSessionMessages(clicked.session_id)
+          setMessages(
+            t.messages.map((m) => ({
+              role: m.role === 'user' ? 'you' : 'ideation',
+              text: m.content,
+            })),
+          )
+        } catch (e) {
+          // The chat can still carry on without its history; say so rather than fail the open.
+          setError(`Couldn't load the earlier conversation — ${errorText(e)}`)
+        }
       } catch (e) {
         setError(errorText(e))
       }
