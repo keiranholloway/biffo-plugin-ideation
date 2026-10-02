@@ -198,3 +198,30 @@ def test_non_admin_gets_403(monkeypatch: pytest.MonkeyPatch, path: str) -> None:
     )
     resp = TestClient(app).get(path, headers={"Authorization": "Bearer tok"})
     assert resp.status_code == 403
+
+
+def test_core_failure_on_list_and_detail_is_502(client: TestClient, core: FakeCore) -> None:
+    from ideation.adapter import CoreHttpError
+
+    async def boom(method, path, **kw):
+        raise CoreHttpError("core down")
+
+    core.request = boom  # type: ignore[method-assign]
+    assert client.get("/pressure-test/sessions").status_code == 502
+    assert client.get("/pressure-test/sessions/a").status_code == 502
+
+
+def test_one_sessions_usage_failure_is_flagged_not_fatal(
+    client: TestClient, core: FakeCore
+) -> None:
+    orig = core.request
+
+    async def req(method, path, **kw):
+        if path.endswith("/th-a/usage"):
+            raise RuntimeError("usage unavailable")
+        return await orig(method, path, **kw)
+
+    core.request = req  # type: ignore[method-assign]
+    s = _by_id(client.get("/pressure-test/sessions").json())
+    assert s["a"]["cost"] is None and s["a"]["cost_error"] is True
+    assert s["b"]["cost_error"] is False
