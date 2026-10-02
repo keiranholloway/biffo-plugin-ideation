@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pytest
@@ -76,7 +75,7 @@ class FakeCore:
         if path == REPORTS:
             return [
                 {
-                    "session_id": params["session_id"],
+                    "session_id": (params or {})["session_id"],
                     "prd": '{"title": "The PRD"}',
                     "scorecard": '{"viability": 4}',
                     "model": "analyst-model",
