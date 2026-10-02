@@ -99,7 +99,13 @@ class FakeCore:
         self.runs[run_id] = Run(id=run_id, status=status, messages=messages or [], model=model)
 
     async def create_session(
-        self, *, owner_sub: str, seed_idea: str, thread_id: str, challenger_agent_key: str
+        self,
+        *,
+        owner_sub: str,
+        seed_idea: str,
+        thread_id: str,
+        challenger_agent_key: str,
+        owner_email: str | None = None,
     ) -> Session:
         self._seq += 1
         session = Session(

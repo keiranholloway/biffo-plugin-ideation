@@ -15,7 +15,7 @@ import { ModelCatalogList } from './components/ModelCatalogList'
 import { ModelCatalogForm } from './components/ModelCatalogForm'
 import { SessionsPanel } from './components/SessionsPanel'
 
-type Tab = 'agents' | 'catalog' | 'sessions'
+type Tab = 'agents' | 'catalog' | 'sessions' | 'pressure-test'
 
 function errorText(e: unknown): string {
   if (e instanceof Error) return e.message
@@ -229,12 +229,25 @@ export default function App() {
         >
           Brain-Storm Sessions
         </button>
+        <button
+          className={`admin-tab ${tab === 'pressure-test' ? 'admin-tab--active' : ''}`}
+          onClick={() => setTab('pressure-test')}
+        >
+          Pressure Test Sessions
+        </button>
       </div>
 
       {tab === 'sessions' && (
         <section className="admin-section">
           <h2>Brain-Storm Sessions</h2>
           <SessionsPanel api={api} />
+        </section>
+      )}
+
+      {tab === 'pressure-test' && (
+        <section className="admin-section">
+          <h2>Pressure Test Sessions</h2>
+          <SessionsPanel api={api} kind="pressure-test" />
         </section>
       )}
 

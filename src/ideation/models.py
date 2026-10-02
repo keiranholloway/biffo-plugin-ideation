@@ -39,6 +39,9 @@ class Session:
     #: behavior of a session already in flight. Defaults to the built-in seed
     #: challenger for a founder who didn't pick one from the active roster.
     challenger_agent_key: str = CHALLENGER_AGENT_NAME
+    #: The owner's email, recorded at creation from the verified token so the
+    #: admin dashboard can show who ran it. None for older sessions.
+    owner_email: str | None = None
 
 
 @dataclass(frozen=True)

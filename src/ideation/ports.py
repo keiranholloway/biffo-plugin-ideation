@@ -40,7 +40,13 @@ class CoreGateway(Protocol):
     """
 
     async def create_session(
-        self, *, owner_sub: str, seed_idea: str, thread_id: str, challenger_agent_key: str
+        self,
+        *,
+        owner_sub: str,
+        seed_idea: str,
+        thread_id: str,
+        challenger_agent_key: str,
+        owner_email: str | None = None,
     ) -> Session: ...
 
     async def get_session(self, *, owner_sub: str, session_id: str) -> Session | None: ...

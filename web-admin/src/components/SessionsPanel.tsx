@@ -1,18 +1,33 @@
 import { useEffect, useState } from 'react'
 import type { Api, SessionQuery, SessionSummary } from '../lib/api'
+import type { SessionKind } from './SessionDetailView'
 import { SessionDetailView } from './SessionDetailView'
 import { formatCost } from './format'
 
-const STATUSES = ['qualifying', 'researching', 'synthesising', 'complete', 'failed']
+const STATUSES: Record<SessionKind, string[]> = {
+  'brain-storm': ['qualifying', 'researching', 'synthesising', 'complete', 'failed'],
+  'pressure-test': ['gathering', 'analysing', 'complete'],
+}
+const LABEL: Record<SessionKind, string> = {
+  'brain-storm': 'brain-storm',
+  'pressure-test': 'pressure-test',
+}
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-/** Every user's Brain-Storm sessions, read-only. Filtering and sorting are done
+/** Every user's sessions of one kind (Brain-Storm by default, or Pressure Test), read-only. Filtering and sorting are done
  * server-side (the cost sort needs every session's usage), so each control
  * change re-queries. */
-export function SessionsPanel({ api }: { api: Pick<Api, 'listSessions' | 'getSession'> }) {
+export function SessionsPanel({
+  api,
+  kind = 'brain-storm',
+}: {
+  api: Pick<Api, 'listSessions' | 'getSession'> &
+    Partial<Pick<Api, 'listPressureTestSessions' | 'getPressureTestSession'>>
+  kind?: SessionKind
+}) {
   const [user, setUser] = useState('')
   const [status, setStatus] = useState('')
   const [sort, setSort] = useState<'date' | 'cost'>('date')
@@ -25,8 +40,9 @@ export function SessionsPanel({ api }: { api: Pick<Api, 'listSessions' | 'getSes
     let cancelled = false
     const q: SessionQuery = { user: user.trim(), status, sort, order }
     setError(null)
-    api
-      .listSessions(q)
+    const list = kind === 'pressure-test' ? api.listPressureTestSessions : api.listSessions
+    if (!list) return
+    list(q)
       .then((r) => {
         if (!cancelled) setSessions(r.sessions)
       })
@@ -36,10 +52,10 @@ export function SessionsPanel({ api }: { api: Pick<Api, 'listSessions' | 'getSes
     return () => {
       cancelled = true
     }
-  }, [api, user, status, sort, order])
+  }, [api, kind, user, status, sort, order])
 
   if (openId)
-    return <SessionDetailView api={api} sessionId={openId} onBack={() => setOpenId(null)} />
+    return <SessionDetailView api={api} kind={kind} sessionId={openId} onBack={() => setOpenId(null)} />
 
   return (
     <div className="sessions">
@@ -58,7 +74,7 @@ export function SessionsPanel({ api }: { api: Pick<Api, 'listSessions' | 'getSes
           Status
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">All</option>
-            {STATUSES.map((s) => (
+            {STATUSES[kind].map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -84,7 +100,7 @@ export function SessionsPanel({ api }: { api: Pick<Api, 'listSessions' | 'getSes
       {sessions === null ? (
         <p>Loading…</p>
       ) : sessions.length === 0 ? (
-        <p>No brain-storm sessions match.</p>
+        <p>No {LABEL[kind]} sessions match.</p>
       ) : (
         <table className="sessions-table">
           <thead>
@@ -106,7 +122,7 @@ export function SessionsPanel({ api }: { api: Pick<Api, 'listSessions' | 'getSes
                 </td>
                 <td>
                   <button className="link-button" onClick={() => setOpenId(s.session_id)}>
-                    {s.title || s.target || s.session_id}
+                    {s.title || s.target || ('seed_idea' in s ? (s as { seed_idea?: string }).seed_idea : '') || s.session_id}
                   </button>
                 </td>
                 <td>
