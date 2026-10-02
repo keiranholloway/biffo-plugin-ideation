@@ -334,7 +334,9 @@ class MalformedOpportunitiesError(IdeationError):
     the service and recorded as a failed *session*, not raised to the caller."""
 
 
-def visible_turns(raw: list[dict[str, Any]], *, strip_brief_state: bool = False) -> list[dict[str, str]]:
+def visible_turns(
+    raw: list[dict[str, Any]], *, strip_brief_state: bool = False
+) -> list[dict[str, str]]:
     """The user/assistant turns of a stored thread that a founder saw: tool,
     system and empty messages are dropped, and (Brain-Storm) the hidden
     ``<brief_state>`` block is stripped exactly as live replies are."""
