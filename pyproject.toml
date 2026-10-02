@@ -66,7 +66,7 @@ source = ["src", "scripts"]
 omit = ["*/tests/*"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "."]
+pythonpath = ["src"]
 
 # Match the platform's Ruff standard (Biffo core pyproject) so this plugin lints
 # clean when vendored into an instance — the instance enforces this select over
@@ -76,7 +76,7 @@ target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "B", "S", "UP"]
+select = ["E", "F", "I", "N", "W", "B", "S", "UP", "TID251"]
 ignore = ["S101"]
 
 [tool.ruff.lint.flake8-bugbear]
@@ -91,6 +91,9 @@ extend-immutable-calls = [
   "fastapi.File",
   "fastapi.Security",
 ]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"src".msg = "Import by package name (`from <pkg>.<mod> import x`), not through `src.`: it fails once the plugin is vendored into an instance."
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["S101", "S105", "S106", "S107"]
