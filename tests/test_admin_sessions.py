@@ -82,7 +82,7 @@ class FakeCore:
                 {
                     "id": "o2",
                     "owner_sub": "sub-alice",
-                    "session_id": params["session_id"],
+                    "session_id": (params or {})["session_id"],
                     "rank": 2,
                     "title": "second",
                     "pitch": "p2",
@@ -90,7 +90,7 @@ class FakeCore:
                 {
                     "id": "o1",
                     "owner_sub": "sub-alice",
-                    "session_id": params["session_id"],
+                    "session_id": (params or {})["session_id"],
                     "rank": 1,
                     "title": "first",
                     "pitch": "p1",
@@ -100,7 +100,7 @@ class FakeCore:
             tid = path.split("/")[-2]
             return {"runs": [self.runs[r] for r in self.thread_runs.get(tid, [])]}
         if path == f"{RUNS}/usage":
-            return {"runs": [self.runs[r] for r in json["run_ids"]]}
+            return {"runs": [self.runs[r] for r in (json or {})["run_ids"]]}
         if path.endswith("/messages"):
             return {
                 "messages": [

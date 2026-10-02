@@ -102,7 +102,7 @@ async def session_usage_rows(transport: Transport, s: BrainstormSession) -> list
     seen: set[str] = set()
 
     def add(stage: str, run: dict[str, Any], label: str) -> None:
-        run_id = run.get("id")
+        run_id = str(run.get("id"))
         if run_id in seen:
             return
         seen.add(run_id)
