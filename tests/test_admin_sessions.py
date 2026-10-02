@@ -10,7 +10,7 @@ import pytest
 from biffo_plugin_sdk import ForwardedUser
 from fastapi.testclient import TestClient
 
-from ideation.adapter import CoreNotFoundError
+from ideation.adapter import CoreHttpError, CoreNotFoundError
 from ideation.admin_app import app, get_admin_transport, require_admin
 from ideation.claims import email_from_token
 
@@ -248,3 +248,19 @@ def test_email_from_token() -> None:
     assert email_from_token(_jwt({"sub": "s"})) is None
     assert email_from_token("not-a-jwt") is None
     assert email_from_token("") is None
+
+
+@pytest.mark.parametrize("path", ["/sessions", "/sessions/a"])
+def test_core_http_failure_is_502(client: TestClient, core: FakeCore, path: str) -> None:
+    async def down(method, path, **kw):
+        raise CoreHttpError("core down")
+
+    core.request = down  # type: ignore[method-assign]
+    assert client.get(path).status_code == 502
+
+
+def test_email_from_token_with_undecodable_payload_is_none() -> None:
+    assert email_from_token("a.!!!.c") is None
+    assert email_from_token("a.\u00e9.c") is None
+    bad = base64.urlsafe_b64encode(b"\xff\xfe").decode()
+    assert email_from_token(f"a.{bad}.c") is None
