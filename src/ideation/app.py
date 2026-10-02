@@ -271,6 +271,7 @@ async def start_session(
         owner_sub=founder.sub,
         seed_idea=body.seed_idea,
         challenger_agent_key=body.challenger_agent_key,
+        owner_email=email_from_token(founder.token),
     )
     turn = await svc.chat_turn(
         owner_sub=founder.sub, session_id=session.id, user_message=body.seed_idea

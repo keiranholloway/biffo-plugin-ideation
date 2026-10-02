@@ -280,6 +280,45 @@ async def read_any_session(
     return detail
 
 
+# ── Pressure Test sessions: every user's, read-only ──────────────────────────
+#
+# Same seams and shape as the Brain-Storm routes above; only the tables differ.
+
+
+@app.get("/pressure-test/sessions")
+async def list_all_pressure_test_sessions(
+    user: str | None = None,
+    status: str | None = None,
+    sort: str = "date",
+    order: str = "desc",
+    transport: CoreTransport = Depends(get_admin_transport),
+) -> dict[str, Any]:
+    if sort not in admin_sessions.SORT_KEYS:
+        raise HTTPException(status_code=422, detail="sort must be 'date' or 'cost'.")
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=422, detail="order must be 'asc' or 'desc'.")
+    try:
+        sessions = await admin_sessions.list_pressure_test_sessions(
+            transport, user=user, status=status, sort=sort, order=order
+        )
+    except CoreHttpError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"sessions": sessions}
+
+
+@app.get("/pressure-test/sessions/{session_id}")
+async def read_any_pressure_test_session(
+    session_id: str, transport: CoreTransport = Depends(get_admin_transport)
+) -> dict[str, Any]:
+    try:
+        detail = await admin_sessions.get_pressure_test_detail(transport, session_id)
+    except CoreHttpError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return detail
+
+
 # ── model catalog: deliberately not here (see the module docstring) ──────────
 #
 # ``/model-catalog`` and ``/model-catalog/{id}`` are manifest-declared

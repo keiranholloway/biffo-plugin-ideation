@@ -168,6 +168,28 @@ export interface SessionDetail extends Omit<SessionSummary, 'cost' | 'cost_error
   cost: CostSummary & { rows: CostRow[] }
 }
 
+export interface PressureTestCostRow extends Omit<CostRow, 'stage'> {
+  stage: 'chat' | 'analysis'
+}
+
+export interface PressureTestSummary extends SessionSummary {
+  seed_idea: string
+}
+
+export interface PressureTestReport {
+  prd: unknown
+  scorecard: unknown
+  model: string | null
+}
+
+export interface PressureTestDetail extends Omit<PressureTestSummary, 'cost' | 'cost_error'> {
+  challenger_agent_key: string
+  transcript: { role: 'user' | 'assistant'; content: string }[]
+  /** Null until the analyst has produced one. */
+  report: PressureTestReport | null
+  cost: CostSummary & { rows: PressureTestCostRow[] }
+}
+
 export interface SessionQuery {
   user?: string
   status?: string
@@ -193,6 +215,19 @@ export function createApi(getIdToken: GetIdToken) {
     },
     getSession: (id: string) =>
       request<SessionDetail>('GET', `/sessions/${encodeURIComponent(id)}`),
+
+    // Pressure Test sessions across all users
+    listPressureTestSessions: (q: SessionQuery = {}) => {
+      const params = new URLSearchParams()
+      for (const [k, v] of Object.entries(q)) if (v) params.set(k, v)
+      const qs = params.toString()
+      return request<{ sessions: PressureTestSummary[] }>(
+        'GET',
+        `/pressure-test/sessions${qs ? `?${qs}` : ''}`,
+      )
+    },
+    getPressureTestSession: (id: string) =>
+      request<PressureTestDetail>('GET', `/pressure-test/sessions/${encodeURIComponent(id)}`),
 
     // Chat agents (5 routes)
     listChatAgents: () => request<ChatAgent[]>('GET', '/chat-agents'),

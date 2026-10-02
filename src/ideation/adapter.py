@@ -97,6 +97,7 @@ def _session_from_row(row: dict[str, Any]) -> Session:
         # Rows created before this column existed have none — fall back to the
         # built-in seed challenger, matching what actually ran for them.
         challenger_agent_key=row.get("challenger_agent_key") or CHALLENGER_AGENT_NAME,
+        owner_email=row.get("owner_email"),
     )
 
 
@@ -147,7 +148,13 @@ class CoreHttpGateway:
         self._t = transport
 
     async def create_session(
-        self, *, owner_sub: str, seed_idea: str, thread_id: str, challenger_agent_key: str
+        self,
+        *,
+        owner_sub: str,
+        seed_idea: str,
+        thread_id: str,
+        challenger_agent_key: str,
+        owner_email: str | None = None,
     ) -> Session:
         row = await self._t.request(
             "POST",
@@ -165,6 +172,7 @@ class CoreHttpGateway:
                 # `POST /sessions` a 500 (#57): the Ideation Engine could not
                 # start a session at all.
                 "deleted": False,
+                "owner_email": owner_email,
             },
         )
         return _session_from_row(row)

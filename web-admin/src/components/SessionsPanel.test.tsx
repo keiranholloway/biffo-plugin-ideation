@@ -128,3 +128,91 @@ describe('SessionsPanel', () => {
     expect(await screen.findByText(/Failed to load sessions: boom/)).toBeInTheDocument()
   })
 })
+
+describe('SessionsPanel — Pressure Test', () => {
+  const ptSessions = [
+    {
+      ...sessions[0],
+      session_id: 'p1',
+      title: 'Alice pressure idea',
+      seed_idea: 'an idea',
+      status: 'complete',
+    },
+    {
+      ...sessions[1],
+      session_id: 'p2',
+      title: null,
+      target: null,
+      seed_idea: 'Bob seed idea',
+      status: 'gathering',
+      deleted: true,
+    },
+  ]
+  const ptDetail = {
+    ...ptSessions[0],
+    challenger_agent_key: 'challenger',
+    transcript: [
+      { role: 'user', content: 'my pitch' },
+      { role: 'assistant', content: 'why now?' },
+    ],
+    report: { prd: { title: 'The PRD title' }, scorecard: { viability: 4 }, model: 'analyst-m' },
+    cost: {
+      ...cost(0.75, 1),
+      rows: [
+        { stage: 'chat', label: 'Challenger turn 1', run_id: 'c1', agent_name: 'c', model: 'model-c', status: 'completed', input_tokens: 10, output_tokens: 5, cost_usd: 0.5, priced: true },
+        { stage: 'chat', label: 'Challenger turn 2', run_id: 'c2', agent_name: 'c', model: 'model-c', status: 'completed', input_tokens: 10, output_tokens: 5, cost_usd: 0.25, priced: true },
+        { stage: 'analysis', label: 'Analyst run', run_id: 'a1', agent_name: 'a', model: 'model-a', status: 'completed', input_tokens: 10, output_tokens: 5, cost_usd: null, priced: false },
+      ],
+    },
+  }
+  function makePtApi() {
+    return {
+      listSessions: vi.fn(),
+      getSession: vi.fn(),
+      listPressureTestSessions: vi.fn().mockResolvedValue({ sessions: ptSessions }),
+      getPressureTestSession: vi.fn().mockResolvedValue(ptDetail),
+    }
+  }
+
+  it('lists pressure-test sessions from several users, with deleted marker and cost', async () => {
+    const api = makePtApi()
+    render(<SessionsPanel api={api} kind="pressure-test" />)
+    expect(await screen.findByText('alice@x.com')).toBeInTheDocument()
+    expect(screen.getByText('sub-bob')).toBeInTheDocument()
+    expect(screen.getByText('Bob seed idea')).toBeInTheDocument()
+    expect(screen.getByText('Deleted')).toBeInTheDocument()
+    expect(screen.getByText('unpriced (3 unpriced runs)')).toBeInTheDocument()
+    expect(api.listSessions).not.toHaveBeenCalled()
+  })
+
+  it('filters with pressure-test statuses', async () => {
+    const api = makePtApi()
+    render(<SessionsPanel api={api} kind="pressure-test" />)
+    await screen.findByText('alice@x.com')
+    expect(screen.getByRole('option', { name: 'gathering' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'researching' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'gathering' } })
+    await waitFor(() =>
+      expect(api.listPressureTestSessions).toHaveBeenLastCalledWith({
+        user: '',
+        status: 'gathering',
+        sort: 'date',
+        order: 'desc',
+      }),
+    )
+  })
+
+  it('opens to the transcript, report and cost breakdown', async () => {
+    const api = makePtApi()
+    render(<SessionsPanel api={api} kind="pressure-test" />)
+    fireEvent.click(await screen.findByText('Alice pressure idea'))
+    expect(await screen.findByText(/my pitch/)).toBeInTheDocument()
+    expect(screen.getByText(/why now\?/)).toBeInTheDocument()
+    expect(screen.getByText(/The PRD title/)).toBeInTheDocument()
+    expect(screen.getByText(/viability/)).toBeInTheDocument()
+    expect(api.getPressureTestSession).toHaveBeenCalledWith('p1')
+    expect(screen.getByText('Analyst run')).toBeInTheDocument()
+    expect(screen.getByText('model-a')).toBeInTheDocument()
+    expect(screen.getByText('$0.7500 (1 unpriced run)')).toBeInTheDocument()
+  })
+})

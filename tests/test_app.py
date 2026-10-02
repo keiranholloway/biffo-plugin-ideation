@@ -98,7 +98,7 @@ class FakeCore:
         raise NotImplementedError
 
     async def create_session(
-        self, *, owner_sub, seed_idea, thread_id, challenger_agent_key
+        self, *, owner_sub, seed_idea, thread_id, challenger_agent_key, owner_email=None
     ) -> Session:
         self._seq += 1
         s = Session(

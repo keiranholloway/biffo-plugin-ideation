@@ -154,7 +154,12 @@ class IdeationService:
         self._max_turns = max_turns
 
     async def start_session(
-        self, *, owner_sub: str, seed_idea: str, challenger_agent_key: str | None = None
+        self,
+        *,
+        owner_sub: str,
+        seed_idea: str,
+        challenger_agent_key: str | None = None,
+        owner_email: str | None = None,
     ) -> Session:
         """Open a session for a founder's idea, in the gathering phase, with a
         fresh run thread to carry the conversation. The idea itself is not put in
@@ -170,6 +175,7 @@ class IdeationService:
             seed_idea=seed_idea.strip(),
             thread_id=str(uuid.uuid4()),
             challenger_agent_key=challenger_agent_key or CHALLENGER_AGENT_NAME,
+            owner_email=owner_email,
         )
 
     async def list_active_challengers(self) -> list[dict[str, Any]]:

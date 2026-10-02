@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { Api, SessionDetail } from '../lib/api'
+import type { Api, PressureTestDetail, SessionDetail } from '../lib/api'
 import { formatCost, formatUsd } from './format'
+
+export type SessionKind = 'brain-storm' | 'pressure-test'
 
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -10,20 +12,23 @@ function errorText(e: unknown): string {
  * the models/tokens/cost per stage. */
 export function SessionDetailView({
   api,
+  kind = 'brain-storm',
   sessionId,
   onBack,
 }: {
-  api: Pick<Api, 'getSession'>
+  api: Pick<Api, 'getSession'> & Partial<Pick<Api, 'getPressureTestSession'>>
+  kind?: SessionKind
   sessionId: string
   onBack: () => void
 }) {
-  const [detail, setDetail] = useState<SessionDetail | null>(null)
+  const [detail, setDetail] = useState<SessionDetail | PressureTestDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    api
-      .getSession(sessionId)
+    const get = kind === 'pressure-test' ? api.getPressureTestSession : api.getSession
+    if (!get) return
+    get(sessionId)
       .then((d) => {
         if (!cancelled) setDetail(d)
       })
@@ -33,7 +38,7 @@ export function SessionDetailView({
     return () => {
       cancelled = true
     }
-  }, [api, sessionId])
+  }, [api, kind, sessionId])
 
   return (
     <div className="session-detail">
@@ -43,7 +48,7 @@ export function SessionDetailView({
       {detail && (
         <>
           <h3>
-            {detail.title || detail.target || detail.session_id}
+            {detail.title || ('target' in detail && detail.target) || detail.session_id}
             {detail.deleted && <span className="badge badge--deleted"> Deleted</span>}
           </h3>
           <p>
@@ -51,6 +56,41 @@ export function SessionDetailView({
             {!detail.owner_email_known && ' (email unknown — only the user id was recorded)'} ·{' '}
             {detail.status} · {detail.created_at ?? '—'} · {detail.turn_count} turns
           </p>
+          {'report' in detail ? (
+            <>
+              <h4>Seed idea</h4>
+              <p className="seed-idea">{detail.seed_idea}</p>
+
+          <h4>Challenger transcript</h4>
+          {detail.transcript.length === 0 ? (
+            <p>No messages.</p>
+          ) : (
+            <ol className="transcript">
+              {detail.transcript.map((m, i) => (
+                <li key={i}>
+                  <strong>{m.role === 'user' ? 'User' : 'Assistant'}:</strong> {m.content}
+                </li>
+              ))}
+            </ol>
+          )}
+
+              <h4>Report</h4>
+              {detail.report ? (
+                <>
+                  <h5>PRD</h5>
+                  <pre className="report-prd">{JSON.stringify(detail.report.prd, null, 2)}</pre>
+                  <h5>Scorecard</h5>
+                  <pre className="report-scorecard">
+                    {JSON.stringify(detail.report.scorecard, null, 2)}
+                  </pre>
+                  <p>Model: {detail.report.model ?? 'unknown'}</p>
+                </>
+              ) : (
+                <p>No report yet.</p>
+              )}
+            </>
+          ) : (
+            <>
           {detail.failure_reason && <p className="admin-error">{detail.failure_reason}</p>}
 
           <h4>Brief</h4>
@@ -89,6 +129,8 @@ export function SessionDetailView({
                 </li>
               ))}
             </ol>
+          )}
+            </>
           )}
 
           <h4>Models and cost</h4>

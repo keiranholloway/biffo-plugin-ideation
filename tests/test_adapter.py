@@ -87,6 +87,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
             seed_idea="an idea",
             thread_id="th-1",
             challenger_agent_key=CHALLENGER_AGENT_NAME,
+            owner_email="alice@x.com",
         )
     )
 
@@ -98,6 +99,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
         "turn_count": 0,
         "challenger_agent_key": CHALLENGER_AGENT_NAME,
         "deleted": False,
+        "owner_email": "alice@x.com",
     }
     assert "owner_sub" not in body  # Core stamps the owner from the token, not the body
     assert session.id == "sess-1" and session.owner_sub == "alice"
