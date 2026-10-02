@@ -134,6 +134,9 @@ class BrainstormSession:
     failure_reason: str | None = None
     created_at: str | None = None
     deleted: bool = False
+    #: The owner's email, captured from the verified token at creation. None for
+    #: sessions created before the column existed (the admin view says so).
+    owner_email: str | None = None
 
     @property
     def ready(self) -> bool:

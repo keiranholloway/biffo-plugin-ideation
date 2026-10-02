@@ -48,6 +48,7 @@ from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
+from . import admin_sessions
 from .adapter import CoreHttpError, CoreHttpGateway
 from .brainstorm_definitions import brainstorm_seed_payloads, brainstorm_workflow_definitions
 from .effective_config import builtin_chat_agents, effective_models
@@ -231,6 +232,52 @@ async def update_chat_agent(
 @app.delete("/chat-agents/{agent_key}", status_code=204)
 async def delete_chat_agent(agent_key: str, admin: ForwardedUser = Depends(require_admin)) -> None:
     await _core_request("DELETE", f"{_CHAT_AGENTS_BASE}/{agent_key}", admin=admin)
+
+
+# ── Brain-Storm sessions: every user's, read-only ────────────────────────────
+#
+# Cross-owner reads go through Core's admin-only owner-data-admin seam
+# (biffo-template#2224); per-run model/cost through its usage routes (#2225).
+# Both are called with the calling admin's own token (dual-auth), and Core
+# re-checks the admin group, so a non-admin is refused here and again there.
+
+
+def get_admin_transport(admin: ForwardedUser = Depends(require_admin)) -> CoreTransport:
+    return CoreTransport(founder_token=admin.token)
+
+
+@app.get("/sessions")
+async def list_all_sessions(
+    user: str | None = None,
+    status: str | None = None,
+    sort: str = "date",
+    order: str = "desc",
+    transport: CoreTransport = Depends(get_admin_transport),
+) -> dict[str, Any]:
+    if sort not in admin_sessions.SORT_KEYS:
+        raise HTTPException(status_code=422, detail="sort must be 'date' or 'cost'.")
+    if order not in ("asc", "desc"):
+        raise HTTPException(status_code=422, detail="order must be 'asc' or 'desc'.")
+    try:
+        sessions = await admin_sessions.list_sessions(
+            transport, user=user, status=status, sort=sort, order=order
+        )
+    except CoreHttpError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"sessions": sessions}
+
+
+@app.get("/sessions/{session_id}")
+async def read_any_session(
+    session_id: str, transport: CoreTransport = Depends(get_admin_transport)
+) -> dict[str, Any]:
+    try:
+        detail = await admin_sessions.get_session_detail(transport, session_id)
+    except CoreHttpError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return detail
 
 
 # ── model catalog: deliberately not here (see the module docstring) ──────────

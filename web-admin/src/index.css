@@ -350,3 +350,15 @@ p {
   overflow-x: auto;
   resize: vertical;
 }
+
+.sessions-filters { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.sessions-filters label { display: flex; flex-direction: column; font-size: 0.85rem; }
+.sessions-table, .cost-table { width: 100%; border-collapse: collapse; }
+.sessions-table th, .sessions-table td, .cost-table th, .cost-table td {
+  text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd;
+}
+.session-row--deleted { opacity: 0.65; background: #fafafa; }
+.badge--deleted { color: #a00; font-weight: 600; }
+.cost--unpriced { color: #a60; font-style: italic; }
+.link-button { background: none; border: none; color: #06c; cursor: pointer; padding: 0; text-align: left; }
+.transcript, .opportunities { padding-left: 1.2rem; }

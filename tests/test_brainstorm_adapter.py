@@ -343,3 +343,20 @@ def test_chat_turn_brief_round_trips_through_adapter():
     t.on("GET", f"{_BS}/bs-1", _row(id="bs-1", brief=body["brief"]))
     session = _run(CoreHttpGateway(t).get_brainstorm_session(owner_sub="alice", session_id="bs-1"))
     assert session is not None and session.brief == expected
+
+
+def test_create_brainstorm_session_records_owner_email_and_reads_it_back():
+    t = FakeTransport()
+    t.on("POST", _BS, _row(owner_email="a@b.com"))
+    s = _run(
+        CoreHttpGateway(t).create_brainstorm_session(
+            owner_sub="alice",
+            target="t",
+            geography=None,
+            problem=None,
+            thread_id="th-1",
+            owner_email="a@b.com",
+        )
+    )
+    assert t.call("POST", _BS)["json"]["owner_email"] == "a@b.com"
+    assert s.owner_email == "a@b.com"

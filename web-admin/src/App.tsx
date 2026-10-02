@@ -13,8 +13,9 @@ import { AgentList } from './components/AgentList'
 import { AgentForm } from './components/AgentForm'
 import { ModelCatalogList } from './components/ModelCatalogList'
 import { ModelCatalogForm } from './components/ModelCatalogForm'
+import { SessionsPanel } from './components/SessionsPanel'
 
-type Tab = 'agents' | 'catalog'
+type Tab = 'agents' | 'catalog' | 'sessions'
 
 function errorText(e: unknown): string {
   if (e instanceof Error) return e.message
@@ -222,7 +223,20 @@ export default function App() {
         >
           Model Catalog
         </button>
+        <button
+          className={`admin-tab ${tab === 'sessions' ? 'admin-tab--active' : ''}`}
+          onClick={() => setTab('sessions')}
+        >
+          Brain-Storm Sessions
+        </button>
       </div>
+
+      {tab === 'sessions' && (
+        <section className="admin-section">
+          <h2>Brain-Storm Sessions</h2>
+          <SessionsPanel api={api} />
+        </section>
+      )}
 
       {tab === 'agents' && (
         <section className="admin-section">

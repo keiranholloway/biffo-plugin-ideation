@@ -288,6 +288,12 @@
           "description": "Why a failed session failed, in terms a founder can read. Null unless status is failed."
         },
         {
+          "name": "owner_email",
+          "type": "String(320)",
+          "nullable": true,
+          "description": "The owner's email, recorded at creation from the verified token's claims so the admin dashboard can show who ran a session. Null for sessions created before this column existed."
+        },
+        {
           "name": "deleted",
           "type": "Boolean",
           "nullable": true,

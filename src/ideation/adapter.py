@@ -122,6 +122,7 @@ def _brainstorm_session_from_row(row: dict[str, Any]) -> BrainstormSession:
         failure_reason=row.get("failure_reason"),
         created_at=row.get("created_at"),
         deleted=row.get("deleted") or False,
+        owner_email=row.get("owner_email"),
     )
 
 
@@ -401,6 +402,7 @@ class CoreHttpGateway:
         problem: str | None,
         thread_id: str,
         title: str | None = None,
+        owner_email: str | None = None,
     ) -> BrainstormSession:
         # owner_sub is never sent: Core stamps it from the forwarded token. Every
         # nullable column is written explicitly — the generated DDL applies no
@@ -417,6 +419,7 @@ class CoreHttpGateway:
                 "status": BS_QUALIFYING,
                 "turn_count": 0,
                 "deleted": False,
+                "owner_email": owner_email,
             },
         )
         return _brainstorm_session_from_row(row)
