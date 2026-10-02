@@ -141,7 +141,7 @@ def test_parse_without_block_returns_none() -> None:
 
 
 def test_qualifier_prompt_mentions_early_option_and_ceiling():
-    from src.ideation.brainstorm_definitions import (
+    from ideation.brainstorm_definitions import (
         QUALIFIER_EARLY_RESEARCH_TURN,
         QUALIFIER_INSTRUCTIONS,
     )
