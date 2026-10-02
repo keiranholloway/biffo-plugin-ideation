@@ -203,6 +203,7 @@ class CoreGateway(Protocol):
         problem: str | None,
         thread_id: str,
         title: str | None = None,
+        owner_email: str | None = None,
     ) -> BrainstormSession: ...
 
     async def get_brainstorm_session(

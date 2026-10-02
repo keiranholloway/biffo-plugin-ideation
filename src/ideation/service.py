@@ -400,6 +400,7 @@ class BrainstormService:
         geography: str | None = None,
         problem: str | None = None,
         title: str | None = None,
+        owner_email: str | None = None,
     ) -> BrainstormSession:
         def clean(v: str | None) -> str | None:
             return (v or "").strip() or None
@@ -411,6 +412,7 @@ class BrainstormService:
             problem=clean(problem),
             thread_id=str(uuid.uuid4()),
             title=clean(title),
+            owner_email=clean(owner_email),
         )
 
     async def _load_owned(self, *, owner_sub: str, session_id: str) -> BrainstormSession:

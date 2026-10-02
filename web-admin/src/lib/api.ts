@@ -104,6 +104,77 @@ export interface EffectiveConfig {
   models: EffectiveModel[]
 }
 
+// ── Brain-Storm sessions (every user's, read-only) ──────────────────────────
+
+/** Totals over a session's runs. `total_cost_usd` is null when no run is priced:
+ * unpriced runs are counted in `unpriced_runs`, never summed as zero. */
+export interface CostSummary {
+  runs: number
+  total_cost_usd: number | null
+  priced_runs: number
+  unpriced_runs: number
+  input_tokens: number
+  output_tokens: number
+}
+
+export interface SessionSummary {
+  session_id: string
+  owner_sub: string
+  owner_email: string | null
+  /** False for sessions created before the email was recorded. */
+  owner_email_known: boolean
+  /** The email when known, else the raw sub. */
+  owner_display: string
+  title: string | null
+  target: string | null
+  status: string
+  created_at: string | null
+  turn_count: number
+  deleted: boolean
+  /** Null when the usage read failed (see cost_error). */
+  cost: CostSummary | null
+  cost_error: boolean
+}
+
+export interface CostRow {
+  stage: 'qualifying' | 'research' | 'synthesis'
+  label: string
+  run_id: string
+  agent_name: string | null
+  model: string | null
+  status: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cost_usd: number | null
+  priced: boolean
+}
+
+export interface SessionOpportunity {
+  rank: number
+  title: string
+  pitch: string
+  rationale: string | null
+  evidence: unknown
+  model: string | null
+}
+
+export interface SessionDetail extends Omit<SessionSummary, 'cost' | 'cost_error'> {
+  geography: string | null
+  problem: string | null
+  brief: Record<string, unknown> | null
+  failure_reason: string | null
+  transcript: { role: 'user' | 'assistant'; content: string }[]
+  opportunities: SessionOpportunity[]
+  cost: CostSummary & { rows: CostRow[] }
+}
+
+export interface SessionQuery {
+  user?: string
+  status?: string
+  sort?: 'date' | 'cost'
+  order?: 'asc' | 'desc'
+}
+
 export type Api = ReturnType<typeof createApi>
 
 export function createApi(getIdToken: GetIdToken) {
@@ -112,6 +183,16 @@ export function createApi(getIdToken: GetIdToken) {
   return {
     // What the engine is running on, stored or not
     getEffectiveConfig: () => request<EffectiveConfig>('GET', '/effective-config'),
+
+    // Brain-Storm sessions across all users
+    listSessions: (q: SessionQuery = {}) => {
+      const params = new URLSearchParams()
+      for (const [k, v] of Object.entries(q)) if (v) params.set(k, v)
+      const qs = params.toString()
+      return request<{ sessions: SessionSummary[] }>('GET', `/sessions${qs ? `?${qs}` : ''}`)
+    },
+    getSession: (id: string) =>
+      request<SessionDetail>('GET', `/sessions/${encodeURIComponent(id)}`),
 
     // Chat agents (5 routes)
     listChatAgents: () => request<ChatAgent[]>('GET', '/chat-agents'),

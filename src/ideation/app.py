@@ -32,6 +32,7 @@ from .brainstorm_definitions import (
     brainstorm_seed_payloads,
     brainstorm_workflow_definitions,
 )
+from .claims import email_from_token
 from .definitions import MAX_TURNS, MIN_TURNS
 from .effective_config import builtin_chat_agents
 from .manifest import manifest_required_group
@@ -415,6 +416,7 @@ async def start_brainstorm_session(
         target=body.target,
         geography=body.geography,
         problem=body.problem,
+        owner_email=email_from_token(founder.token),
     )
     turn = await svc.chat_turn(owner_sub=founder.sub, session_id=session.id, user_message=opening)
     state = await svc.get_session(owner_sub=founder.sub, session_id=session.id)

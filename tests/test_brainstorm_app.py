@@ -32,7 +32,7 @@ class FakeCore:
         return list(self.threads.get(thread_id, []))
 
     async def create_brainstorm_session(
-        self, *, owner_sub, target, geography, problem, thread_id, title=None
+        self, *, owner_sub, target, geography, problem, thread_id, title=None, owner_email=None
     ):
         self._seq += 1
         s = BrainstormSession(
