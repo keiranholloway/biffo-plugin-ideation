@@ -237,3 +237,18 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run test
       - run: pnpm run build
+
+  # The one distributed real-execution conformance lane (biffo-template#1523).
+  # One line, no logic of its own: local and CI invoke the identical code path
+  # (`sh scripts/biffo.sh plugin verify`), so local green predicts CI green.
+  plugin-verify:
+    name: plugin verify
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --all-groups
+      - run: sh scripts/biffo.sh plugin verify
