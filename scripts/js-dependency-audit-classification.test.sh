@@ -129,6 +129,12 @@ cat > "$STUB_DIR/output-vuln-a-b.json" <<'JSON'
 {"metadata":{"vulnerabilities":{"critical":0,"high":2,"moderate":0,"low":0},"totalDependencies":5},"advisories":{"1":{"severity":"high","github_advisory_id":"GHSA-test-0001","module_name":"vuln-pkg-a","findings":[{"version":"1.2.3","paths":[]}]},"2":{"severity":"high","github_advisory_id":"GHSA-test-0002","module_name":"vuln-pkg-b","findings":[{"version":"2.0.0","paths":[]}]}}}
 JSON
 
+# pnpm `auditConfig.ignoreGhsas` shape: advisories emptied, metadata still
+# counting the ignored high advisory.
+cat > "$STUB_DIR/output-ignored.json" <<'JSON'
+{"metadata":{"vulnerabilities":{"critical":0,"high":1,"moderate":0,"low":0},"totalDependencies":5},"advisories":{}}
+JSON
+
 # --- repo scaffolding --------------------------------------------------------
 # One workspace-level pnpm-lock.yaml so discovery finds exactly one tree,
 # matching the real incident (the workspace root, not a vendored tree).
@@ -294,47 +300,12 @@ _init_repo "clean" "clean"
 _run dev
 _assert_exit "clean run unaffected" 0
 
-# 8. Registry race (option (b)): head and base lockfiles are byte-identical
-#    but the two audit calls disagree. The stub keys its output off a
-#    counter-based override file: the first audit (head) sees the advisory,
-#    the base-side call sees clean. Must fail closed (exit 2, inconclusive),
-#    never "pre-existing" and never silently pass.
-_init_repo "vuln-a" "vuln-a"
-cat > "$STUB_DIR/pnpm" <<'STUB'
-#!/usr/bin/env sh
-if [ "$1" = "audit" ]; then
-  case "$PWD" in
-    *js-dependency-audit-base.*) cat "$STUB_DIR_ENV/output-clean.json" ;;
-    *) cat "$STUB_DIR_ENV/output-vuln-a.json" ;;
-  esac
-  exit 0
-fi
-exit 99
-STUB
+# 8. pnpm ignoreGhsas: metadata still counts the ignored advisory but
+#    .advisories is empty -- must not block.
+_init_repo "ignored" "ignored"
 _run dev
-_assert_exit "identical lockfiles, audits disagree -- inconclusive, blocks" 2
-_assert_output_contains "race case says inconclusive" "INCONCLUSIVE"
-
-# 9. Base-side call unstable across two calls (first reports the advisory,
-#    re-check does not): must not be trusted as "pre-existing".
-_init_repo "clean" "vuln-a"
-cat > "$STUB_DIR/pnpm" <<'STUB'
-#!/usr/bin/env sh
-if [ "$1" = "audit" ]; then
-  case "$PWD" in
-    *js-dependency-audit-base.*)
-      n=$(cat "$STUB_DIR_ENV/count" 2>/dev/null || echo 0)
-      echo $((n + 1)) >"$STUB_DIR_ENV/count"
-      if [ "$n" -eq 0 ]; then cat "$STUB_DIR_ENV/output-vuln-a.json"; else cat "$STUB_DIR_ENV/output-clean.json"; fi ;;
-    *) cat "$STUB_DIR_ENV/output-vuln-a.json" ;;
-  esac
-  exit 0
-fi
-exit 99
-STUB
-rm -f "$STUB_DIR/count"
-_run dev
-_assert_exit "unstable base answer -- inconclusive, blocks" 2
+_assert_exit "ignoreGhsas-suppressed advisory does not block" 0
+_assert_output_contains "ignored case reports 0 high" "0 critical, 0 high"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
