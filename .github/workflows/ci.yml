@@ -183,13 +183,16 @@ jobs:
   # routing-smoke-test) sat in the tree looking like coverage while
   # contributing none to real CI -- a fail-open the guard script exists
   # specifically to catch, that was itself unwired the same way. Needs only
-  # the checked-out tree (find/grep/sort/mktemp), no uv/pnpm setup.
+  # the checked-out tree (find/grep/sort/mktemp) plus uv (the
+  # py-dependency-audit-classification guard test exercises uv's workspace
+  # discovery); no pnpm setup.
   guard-wiring:
     name: Guard wiring audit
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
       - name: Guard self-test wiring
         run: sh scripts/guard-self-test-wiring.sh
 
