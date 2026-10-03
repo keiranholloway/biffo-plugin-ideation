@@ -49,6 +49,11 @@ jobs:
       - name: Error-branch coverage
         run: uv run python scripts/error_branch_coverage.py --check --coverage coverage.json
 
+      # Real-execution plugin conformance harness (biffo-template#1523/#1926);
+      # contains no logic of its own. Needs the SDK from `uv sync` above.
+      - name: Plugin verify
+        run: sh scripts/biffo.sh plugin verify
+
   # This repo had no secret scanning at all -- no CI job, no .gitleaks.toml,
   # while .githooks/pre-push's own claim guard comment named gitleaks as part
   # of "the WHOLE gate" (#143). Ported from biffo-plugin-idea-scout's
@@ -178,13 +183,16 @@ jobs:
   # routing-smoke-test) sat in the tree looking like coverage while
   # contributing none to real CI -- a fail-open the guard script exists
   # specifically to catch, that was itself unwired the same way. Needs only
-  # the checked-out tree (find/grep/sort/mktemp), no uv/pnpm setup.
+  # the checked-out tree (find/grep/sort/mktemp) plus uv (the
+  # py-dependency-audit-classification guard test exercises uv's workspace
+  # discovery); no pnpm setup.
   guard-wiring:
     name: Guard wiring audit
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
       - name: Guard self-test wiring
         run: sh scripts/guard-self-test-wiring.sh
 
