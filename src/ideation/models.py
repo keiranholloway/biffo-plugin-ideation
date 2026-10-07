@@ -137,9 +137,6 @@ class BrainstormSession:
     #: research runs have finished. None until then.
     research_findings: list[dict[str, object]] | None = None
     synthesis_run_id: str | None = None
-    #: The per-angle research snapshot taken when research finished (list of
-    #: ``{angle, status, findings}``); None for older sessions.
-    research_findings: list[dict[str, object]] | None = None
     failure_reason: str | None = None
     created_at: str | None = None
     deleted: bool = False

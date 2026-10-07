@@ -121,7 +121,6 @@ def _brainstorm_session_from_row(row: dict[str, Any]) -> BrainstormSession:
         research_run_ids=_json_or(row.get("research_run_ids"), []),
         research_findings=_json_or(row.get("research_findings"), None),
         synthesis_run_id=row.get("synthesis_run_id"),
-        research_findings=_json_or(row.get("research_findings"), None),
         failure_reason=row.get("failure_reason"),
         created_at=row.get("created_at"),
         deleted=row.get("deleted") or False,
