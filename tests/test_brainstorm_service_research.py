@@ -11,6 +11,7 @@ from typing import Any, cast
 import pytest
 
 from ideation.brainstorm_definitions import (
+    FINDINGS_TOOL_NAME,
     OPPORTUNITIES_TOOL_NAME,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
@@ -346,3 +347,112 @@ def test_extract_opportunities_rejects_an_invalid_shortlist() -> None:
     ]
     with pytest.raises(MalformedOpportunitiesError):
         extract_opportunities(messages)
+
+
+def _findings_messages(angle: str = "pain") -> list[dict[str, object]]:
+    payload = {
+        "angle": angle,
+        "findings": [
+            {
+                "signal": "s1",
+                "why_it_matters": "w1",
+                "sources": [{"url": "https://x.example", "note": "n"}],
+            }
+        ],
+    }
+    return [
+        {
+            "tool_calls": [
+                {"function": {"name": FINDINGS_TOOL_NAME, "arguments": json.dumps(payload)}}
+            ]
+        }
+    ]
+
+
+@_sync
+async def test_get_research_returns_every_angle_with_status() -> None:
+    core = FakeCore()
+    session = await _researching(core)
+    ids = session.research_run_ids
+    core.runs[ids[0]] = AgentRunView(
+        id=ids[0], status="completed", started_at="t", messages=_findings_messages()
+    )
+    core.runs[ids[1]] = AgentRunView(id=ids[1], status="failed", started_at="t")
+    core.runs[ids[2]] = AgentRunView(
+        id=ids[2],
+        status="completed",
+        started_at="t",
+        messages=[
+            {"tool_calls": [{"function": {"name": FINDINGS_TOOL_NAME, "arguments": "{not json"}}]}
+        ],
+    )
+    core.runs[ids[3]] = AgentRunView(id=ids[3], status="failed")  # never started
+    core.runs[ids[4]] = AgentRunView(
+        id=ids[4], status="completed", started_at="t", messages=[{"content": "prose"}]
+    )
+
+    research = await _svc(core).get_research(owner_sub="alice", session_id="b1")
+
+    assert [r["angle"] for r in research] == [
+        n.removeprefix("ideation-brainstorm-") for n in RESEARCH_AGENT_NAMES
+    ]
+    by = {r["angle"]: r for r in research}
+    assert by["pain"]["status"] == "succeeded"
+    assert by["pain"]["findings"][0]["signal"] == "s1"
+    assert by["pain"]["findings"][0]["sources"][0]["url"] == "https://x.example"
+    assert by["market"] == {"angle": "market", "status": "failed", "findings": []}
+    assert by["workflow"]["status"] == "malformed" and by["workflow"]["findings"] == []
+    assert by["trend"]["status"] == "never_started"
+    assert by["economics"]["status"] == "malformed"
+    assert by["contrarian"]["status"] == "running"
+
+
+@_sync
+async def test_get_research_is_owner_scoped() -> None:
+    from ideation.service import SessionNotFoundError
+
+    core = FakeCore()
+    await _researching(core)
+    with pytest.raises(SessionNotFoundError):
+        await _svc(core).get_research(owner_sub="bob", session_id="b1")
+
+
+def test_extract_findings_rejects_schema_invalid_payload():
+    from ideation.service import MalformedFindingsError, extract_findings
+
+    messages = [
+        {
+            "tool_calls": [
+                {"function": {"name": FINDINGS_TOOL_NAME, "arguments": {"unexpected": "shape"}}}
+            ]
+        }
+    ]
+    with pytest.raises(MalformedFindingsError):
+        extract_findings(messages)
+
+
+@_sync
+async def test_findings_are_stored_when_research_finishes_and_survive_run_purge() -> None:
+    core = FakeCore()
+    session = await _researching(core)
+    ids = session.research_run_ids
+    for i, rid in enumerate(ids):
+        core.runs[rid] = AgentRunView(
+            id=rid,
+            status="completed" if i else "failed",
+            started_at="t",
+            messages=_findings_messages() if i else [],
+        )
+    assert session.chain_id is not None
+    core.chain_runs[(session.chain_id, SYNTHESIS_AGENT_NAME)] = AgentRunView(
+        id="syn", status="running", started_at="t"
+    )
+    await _svc(core).get_session(owner_sub="alice", session_id="b1")
+    stored = core.sessions["b1"].research_findings
+    assert stored is not None and len(stored) == 6
+
+    core.runs.clear()  # Core purged the run messages
+    research = await _svc(core).get_research(owner_sub="alice", session_id="b1")
+    assert research == stored
+    assert research[0]["status"] == "failed" and research[0]["findings"] == []
+    assert research[1]["findings"][0]["signal"] == "s1"

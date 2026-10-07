@@ -10,6 +10,7 @@ import {
   type BrainstormBrief,
   type BrainstormOpportunity,
   type BrainstormState,
+  type ResearchAngle,
   type TranscriptMessage,
 } from '../lib/api'
 
@@ -75,16 +76,72 @@ function BriefDetails({ brief }: { brief?: BrainstormBrief | null }) {
   )
 }
 
+const ANGLE_LABELS: Record<string, string> = {
+  pain: 'Pain',
+  market: 'Market',
+  workflow: 'Workflow',
+  trend: 'Trend',
+  economics: 'Economics',
+  contrarian: 'Contrarian',
+}
+
+function ResearchSection({ research }: { research: ResearchAngle[] }) {
+  return (
+    <details className="ide-research">
+      <summary>Research behind these results</summary>
+      {research.map((r) => (
+        <div key={r.angle} className="ide-research-angle">
+          <h3>{ANGLE_LABELS[r.angle] ?? r.angle}</h3>
+          {r.status === 'succeeded' && r.findings.length > 0 ? (
+            <ul className="ide-findings">
+              {r.findings.map((f, i) => (
+                <li key={i}>
+                  <p>{f.signal}</p>
+                  <p className="ide-why">{f.why_it_matters}</p>
+                  {f.sources.length > 0 && (
+                    <ul className="ide-evidence">
+                      {f.sources.map((src, j) => (
+                        <li key={j}>
+                          <a href={src.url} target="_blank" rel="noopener noreferrer">
+                            {src.url}
+                          </a>
+                          {src.note ? ` — ${src.note}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : r.status === 'succeeded' ? (
+            <p>This angle returned no findings.</p>
+          ) : r.status === 'running' ? (
+            <p>This angle is still running.</p>
+          ) : r.status === 'never_started' ? (
+            <p>This angle never started.</p>
+          ) : r.status === 'malformed' ? (
+            <p>This angle returned output we could not read.</p>
+          ) : (
+            <p>This angle failed.</p>
+          )}
+        </div>
+      ))}
+    </details>
+  )
+}
+
 function historyTitle(s: BrainstormState): string {
   return s.title || s.target || s.problem || s.geography || 'Untitled brain-storm'
 }
 
 export function BrainStorm({
   api,
+  sourceCandidateId,
   onPressureTest,
   header,
 }: {
   api: Api
+  sourceCandidateId?: string
   onPressureTest?: (seed: string) => void
   /** Rendered at the top of the main pane (title and tab bar), beside the history column. */
   header?: ReactNode
@@ -98,6 +155,7 @@ export function BrainStorm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [opportunities, setOpportunities] = useState<BrainstormOpportunity[]>([])
+  const [research, setResearch] = useState<ResearchAngle[]>([])
   const [history, setHistory] = useState<BrainstormState[]>([])
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const [historyFailed, setHistoryFailed] = useState(false)
@@ -136,6 +194,18 @@ export function BrainStorm({
     void loadHistory()
   }, [api, sessionIdForList])
 
+  // Research is shown for complete sessions and for failed ones that kept some.
+  // A failure to read it must not hide the rest of the view.
+  async function loadResearch(id: string, st: string): Promise<ResearchAngle[]> {
+    if (st !== 'complete' && st !== 'failed') return []
+    try {
+      const rows = (await api.getBrainstormResearch(id)).research
+      return st === 'failed' && !rows.some((r) => r.status === 'succeeded') ? [] : rows
+    } catch {
+      return []
+    }
+  }
+
   async function open(summary: BrainstormState) {
     setBusy(true)
     setError(null)
@@ -147,6 +217,7 @@ export function BrainStorm({
       if (state.status === 'complete') {
         opps = (await api.getBrainstormOpportunities(summary.session_id)).opportunities
       }
+      setResearch(await loadResearch(summary.session_id, state.status))
       setMessages(toMsgs(t.messages))
       setOpportunities(opps)
       setInput('')
@@ -179,7 +250,9 @@ export function BrainStorm({
       ...(problem.trim() ? { problem: problem.trim() } : {}),
     }
     try {
-      const r = await api.startBrainstorm(intake)
+      const r = await api.startBrainstorm(
+        sourceCandidateId ? { ...intake, source_candidate_id: sourceCandidateId } : intake,
+      )
       const opening = [
         intake.target && `Target: ${intake.target}`,
         intake.geography && `Geography: ${intake.geography}`,
@@ -248,6 +321,11 @@ export function BrainStorm({
           if (stopped) return
           setOpportunities(o.opportunities)
         }
+        if (r.status === 'complete' || r.status === 'failed') {
+          const rs = await loadResearch(sessionId, r.status)
+          if (stopped) return
+          setResearch(rs)
+        }
         setSession((s) => (s ? { ...s, status: r.status, failure_reason: r.failure_reason } : s))
         if (r.status === 'researching' || r.status === 'synthesising') {
           timer = window.setTimeout(() => void tick(), POLL_MS)
@@ -268,6 +346,7 @@ export function BrainStorm({
     setMessages([])
     setInput('')
     setOpportunities([])
+    setResearch([])
     setError(null)
   }
 
@@ -359,6 +438,7 @@ export function BrainStorm({
       {session && status === 'failed' && (
         <div className="ide-failed">
           <p>{session.failure_reason ?? 'The brain-storm failed.'}</p>
+          {research.length > 0 && <ResearchSection research={research} />}
           <button type="button" onClick={reset}>
             New brain-storm
           </button>
@@ -394,6 +474,7 @@ export function BrainStorm({
               </li>
             ))}
           </ol>
+          {research.length > 0 && <ResearchSection research={research} />}
           <button type="button" onClick={reset}>
             New brain-storm
           </button>

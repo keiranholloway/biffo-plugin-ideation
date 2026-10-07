@@ -222,6 +222,7 @@ def test_session_row_parses_json_text_columns():
         _row(
             brief=json.dumps({"target": "logistics"}),
             research_run_ids=json.dumps(["a", "b"]),
+            research_findings=json.dumps([{"angle": "pain", "status": "failed", "findings": []}]),
             chain_id="chain-1",
             deleted=None,
             turn_count=None,
@@ -231,6 +232,7 @@ def test_session_row_parses_json_text_columns():
     assert s is not None
     assert s.brief == {"target": "logistics"}
     assert s.research_run_ids == ["a", "b"]
+    assert s.research_findings == [{"angle": "pain", "status": "failed", "findings": []}]
     assert s.chain_id == "chain-1"
     assert s.deleted is False
     assert s.turn_count == 0
@@ -360,3 +362,14 @@ def test_create_brainstorm_session_records_owner_email_and_reads_it_back():
     )
     assert t.call("POST", _BS)["json"]["owner_email"] == "a@b.com"
     assert s.owner_email == "a@b.com"
+
+
+def test_research_findings_column_is_json_decoded() -> None:
+    from ideation.adapter import _brainstorm_session_from_row
+
+    row = {"id": "b", "owner_sub": "a", "status": "complete"}
+    assert _brainstorm_session_from_row(row).research_findings is None
+    row["research_findings"] = json.dumps([{"angle": "pain", "status": "failed", "findings": []}])
+    stored = _brainstorm_session_from_row(row).research_findings
+    assert stored is not None
+    assert stored[0]["angle"] == "pain"

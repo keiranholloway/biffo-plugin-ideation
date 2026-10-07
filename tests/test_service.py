@@ -106,6 +106,7 @@ class FakeCore:
         thread_id: str,
         challenger_agent_key: str,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> Session:
         self._seq += 1
         session = Session(

@@ -42,6 +42,10 @@ class Session:
     #: The owner's email, recorded at creation from the verified token so the
     #: admin dashboard can show who ran it. None for older sessions.
     owner_email: str | None = None
+    #: The Idea Scout candidate this session was started from, if any. None for
+    #: sessions not started from Idea Scout — those are never returned by the
+    #: linked-content read.
+    source_candidate_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,9 @@ class BrainstormSession:
     turn_count: int = 0
     chain_id: str | None = None
     research_run_ids: list[str] = field(default_factory=list)
+    #: Snapshot of the per-angle research (angle/status/findings), stored once the
+    #: research runs have finished. None until then.
+    research_findings: list[dict[str, object]] | None = None
     synthesis_run_id: str | None = None
     failure_reason: str | None = None
     created_at: str | None = None
@@ -140,6 +147,8 @@ class BrainstormSession:
     #: The owner's email, captured from the verified token at creation. None for
     #: sessions created before the column existed (the admin view says so).
     owner_email: str | None = None
+    #: The Idea Scout candidate this brainstorm was started from, if any.
+    source_candidate_id: str | None = None
 
     @property
     def ready(self) -> bool:

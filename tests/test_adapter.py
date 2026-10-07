@@ -100,6 +100,7 @@ def test_create_session_posts_without_owner_and_parses_the_row():
         "challenger_agent_key": CHALLENGER_AGENT_NAME,
         "deleted": False,
         "owner_email": "alice@x.com",
+        "source_candidate_id": None,
     }
     assert "owner_sub" not in body  # Core stamps the owner from the token, not the body
     assert session.id == "sess-1" and session.owner_sub == "alice"

@@ -98,6 +98,7 @@ def _session_from_row(row: dict[str, Any]) -> Session:
         # built-in seed challenger, matching what actually ran for them.
         challenger_agent_key=row.get("challenger_agent_key") or CHALLENGER_AGENT_NAME,
         owner_email=row.get("owner_email"),
+        source_candidate_id=row.get("source_candidate_id"),
     )
 
 
@@ -119,11 +120,13 @@ def _brainstorm_session_from_row(row: dict[str, Any]) -> BrainstormSession:
         turn_count=row.get("turn_count") or 0,
         chain_id=row.get("chain_id"),
         research_run_ids=_json_or(row.get("research_run_ids"), []),
+        research_findings=_json_or(row.get("research_findings"), None),
         synthesis_run_id=row.get("synthesis_run_id"),
         failure_reason=row.get("failure_reason"),
         created_at=row.get("created_at"),
         deleted=row.get("deleted") or False,
         owner_email=row.get("owner_email"),
+        source_candidate_id=row.get("source_candidate_id"),
     )
 
 
@@ -155,6 +158,7 @@ class CoreHttpGateway:
         thread_id: str,
         challenger_agent_key: str,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> Session:
         row = await self._t.request(
             "POST",
@@ -173,6 +177,7 @@ class CoreHttpGateway:
                 # start a session at all.
                 "deleted": False,
                 "owner_email": owner_email,
+                "source_candidate_id": source_candidate_id,
             },
         )
         return _session_from_row(row)
@@ -411,6 +416,7 @@ class CoreHttpGateway:
         thread_id: str,
         title: str | None = None,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> BrainstormSession:
         # owner_sub is never sent: Core stamps it from the forwarded token. Every
         # nullable column is written explicitly — the generated DDL applies no
@@ -428,6 +434,7 @@ class CoreHttpGateway:
                 "turn_count": 0,
                 "deleted": False,
                 "owner_email": owner_email,
+                "source_candidate_id": source_candidate_id,
             },
         )
         return _brainstorm_session_from_row(row)
@@ -449,7 +456,7 @@ class CoreHttpGateway:
     async def update_brainstorm_session(self, *, session_id: str, **fields: Any) -> None:
         body = dict(fields)
         # Text columns holding JSON (no JSON type in Core's plugin-table map).
-        for key in ("brief", "research_run_ids"):
+        for key in ("brief", "research_run_ids", "research_findings"):
             if key in body and body[key] is not None:
                 body[key] = json.dumps(body[key])
         await self._t.request("PATCH", f"{_BS_SESSIONS}/{session_id}", json=body)

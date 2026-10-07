@@ -20,12 +20,14 @@ from typing import Any
 from pydantic import ValidationError
 
 from .brainstorm_definitions import (
+    FINDINGS_TOOL_NAME,
     MAX_OPPORTUNITIES,
     OPPORTUNITIES_TOOL_NAME,
     QUALIFIER_AGENT_NAME,
     QUALIFIER_MAX_TURNS,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
+    FindingSet,
     OpportunitySet,
     findings_tool_schema,
     parse_brief_state,
@@ -160,6 +162,7 @@ class IdeationService:
         seed_idea: str,
         challenger_agent_key: str | None = None,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> Session:
         """Open a session for a founder's idea, in the gathering phase, with a
         fresh run thread to carry the conversation. The idea itself is not put in
@@ -170,13 +173,29 @@ class IdeationService:
         re-resolved later) — an admin editing or deactivating an agent must
         never change the behavior of a session already in flight. Defaults to
         the built-in seed challenger for a founder who didn't pick one."""
+        extra: dict[str, Any] = {}
+        if source_candidate_id:
+            extra["source_candidate_id"] = source_candidate_id
         return await self._core.create_session(
             owner_sub=owner_sub,
             seed_idea=seed_idea.strip(),
             thread_id=str(uuid.uuid4()),
             challenger_agent_key=challenger_agent_key or CHALLENGER_AGENT_NAME,
             owner_email=owner_email,
+            **extra,
         )
+
+    async def list_linked_sessions(self, *, owner_sub: str, candidate_id: str) -> list[Session]:
+        """This owner's non-deleted sessions started from the given Idea Scout
+        candidate. Sessions with no ``source_candidate_id`` never match, and the
+        listing is the owner-scoped one, so another owner's sessions can't appear."""
+        if not candidate_id:
+            return []
+        return [
+            s
+            for s in await self.list_sessions(owner_sub=owner_sub)
+            if s.source_candidate_id is not None and s.source_candidate_id == candidate_id
+        ]
 
     async def list_active_challengers(self) -> list[dict[str, Any]]:
         """The active challenger roster for a founder's seed-view picker —
@@ -340,6 +359,11 @@ class MalformedOpportunitiesError(IdeationError):
     the service and recorded as a failed *session*, not raised to the caller."""
 
 
+class MalformedFindingsError(IdeationError):
+    """A research run finished without a valid findings call. Reported as that
+    angle's status, never raised to the caller."""
+
+
 def visible_turns(
     raw: list[dict[str, Any]], *, strip_brief_state: bool = False
 ) -> list[dict[str, str]]:
@@ -388,6 +412,32 @@ def extract_opportunities(run_messages: list[dict[str, Any]]) -> OpportunitySet:
         raise MalformedOpportunitiesError(str(exc)) from exc
 
 
+def extract_findings(run_messages: list[dict[str, Any]]) -> FindingSet:
+    """Pull one research agent's findings out of its run transcript (the last
+    call to the findings tool). Raises :class:`MalformedFindingsError` if
+    missing or invalid."""
+    found: Any = None
+    for message in run_messages:
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            if function.get("name") != FINDINGS_TOOL_NAME:
+                continue
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                try:
+                    found = json.loads(arguments)
+                except json.JSONDecodeError:
+                    continue
+            else:
+                found = arguments
+    if found is None:
+        raise MalformedFindingsError(f"the run produced no {FINDINGS_TOOL_NAME} tool call")
+    try:
+        return FindingSet.model_validate(found)
+    except ValidationError as exc:
+        raise MalformedFindingsError(str(exc)) from exc
+
+
 class BrainstormService:
     """The Brain-Storming qualifying chat — transport-agnostic, like
     :class:`IdeationService`. Sessions start in ``qualifying``; each turn is a
@@ -407,11 +457,16 @@ class BrainstormService:
         problem: str | None = None,
         title: str | None = None,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> BrainstormSession:
         def clean(v: str | None) -> str | None:
             return (v or "").strip() or None
 
+        extra: dict[str, Any] = {}
+        if clean(source_candidate_id):
+            extra["source_candidate_id"] = clean(source_candidate_id)
         return await self._core.create_brainstorm_session(
+            **extra,
             owner_sub=owner_sub,
             target=clean(target),
             geography=clean(geography),
@@ -420,6 +475,18 @@ class BrainstormService:
             title=clean(title),
             owner_email=clean(owner_email),
         )
+
+    async def list_linked_sessions(
+        self, *, owner_sub: str, candidate_id: str
+    ) -> list[BrainstormSession]:
+        """This owner's brainstorms started from the given Idea Scout candidate."""
+        if not candidate_id:
+            return []
+        return [
+            s
+            for s in await self.list_sessions(owner_sub=owner_sub)
+            if s.source_candidate_id is not None and s.source_candidate_id == candidate_id
+        ]
 
     async def _load_owned(self, *, owner_sub: str, session_id: str) -> BrainstormSession:
         session = await self._core.get_brainstorm_session(
@@ -447,6 +514,42 @@ class BrainstormService:
         return await self._core.list_brainstorm_opportunities(
             owner_sub=owner_sub, session_id=session_id
         )
+
+    async def get_research(self, *, owner_sub: str, session_id: str) -> list[dict[str, Any]]:
+        """One entry per research angle: its status (``succeeded``, ``failed``,
+        ``malformed``, ``never_started`` or ``running``) and its findings (empty
+        unless it succeeded). An angle is never left out."""
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.research_findings is not None:
+            return list(session.research_findings)
+        return await self._read_research(session)
+
+    async def _read_research(self, session: BrainstormSession) -> list[dict[str, Any]]:
+        """Read each angle's status and findings back from its agent run."""
+        run_ids = list(session.research_run_ids or [])
+        out: list[dict[str, Any]] = []
+        for i, agent_name in enumerate(RESEARCH_AGENT_NAMES):
+            angle = agent_name.removeprefix("ideation-brainstorm-")
+            status = "never_started"
+            findings: list[dict[str, Any]] = []
+            run_id = run_ids[i] if i < len(run_ids) else None
+            view = await self._core.get_agent_run(run_id=run_id) if run_id else None
+            if view is not None:
+                if not view.is_terminal:
+                    status = "running"
+                elif view.never_started:
+                    status = "never_started"
+                elif not view.succeeded:
+                    status = "failed"
+                else:
+                    try:
+                        fs = extract_findings(view.messages)
+                        status = "succeeded"
+                        findings = [f.model_dump() for f in fs.findings]
+                    except MalformedFindingsError:
+                        status = "malformed"
+            out.append({"angle": angle, "status": status, "findings": findings})
+        return out
 
     async def get_messages(self, *, owner_sub: str, session_id: str) -> list[dict[str, str]]:
         """The visible transcript of the founder's own brain-storm, with the
@@ -575,6 +678,7 @@ class BrainstormService:
             chain_id=session.chain_id, agent_name=SYNTHESIS_AGENT_NAME
         )
         if synthesis is not None:
+            session = await self._snapshot_research(session)
             await self._core.update_brainstorm_session(
                 session_id=session.id, status=BS_SYNTHESISING, synthesis_run_id=synthesis.id
             )
@@ -590,6 +694,7 @@ class BrainstormService:
             # moment to react to the completion event — don't race it to a
             # false failure.
             return session
+        session = await self._snapshot_research(session)
         if views and all(v is not None and v.never_started for v in views):
             return await self._fail(session, self.NEVER_STARTED_REASON)
         return await self._fail(
@@ -598,11 +703,27 @@ class BrainstormService:
             "Nothing was found to build opportunities from — try running again.",
         )
 
+    async def _snapshot_research(self, session: BrainstormSession) -> BrainstormSession:
+        """Store the per-angle research on the session once every research run has
+        finished, so it survives however long Core keeps agent-run messages (and a
+        later synthesis failure). A no-op if already stored or still running."""
+        if session.research_findings is not None or not session.research_run_ids:
+            return session
+        research = await self._read_research(session)
+        if any(r["status"] == "running" for r in research):
+            return session
+        await self._core.update_brainstorm_session(
+            session_id=session.id, research_findings=research
+        )
+        return dataclasses.replace(session, research_findings=research)
+
     async def _advance_synthesis(self, session: BrainstormSession) -> BrainstormSession:
         """Synthesis -> complete, storing the ranked opportunities."""
         if session.synthesis_run_id is None:  # pragma: no cover — guarded by the caller
             return session
-        view = await self._core.get_agent_run(run_id=session.synthesis_run_id)
+        synthesis_run_id = session.synthesis_run_id
+        session = await self._snapshot_research(session)
+        view = await self._core.get_agent_run(run_id=synthesis_run_id)
         if view is not None and not view.is_terminal:
             return session  # still synthesising
         if view is not None and view.never_started:

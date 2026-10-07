@@ -104,7 +104,7 @@ def test_every_owner_scoped_table_is_owner_scoped_on_a_real_column() -> None:
         if table["name"] not in _OWNER_SCOPED_TABLES:
             continue
         access = table["owner_scoped_service"]
-        assert access["allowed_principals"] == ["system:ideation"]
+        assert access["allowed_principals"] == ["system:ideation", "system:idea-scout"]
         column_names = {c["name"] for c in table["columns"]}
         assert access["owner_column"] in column_names, (
             f"{table['name']} owner_column must be a declared column"

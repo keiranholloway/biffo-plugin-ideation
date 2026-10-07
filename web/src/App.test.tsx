@@ -1226,6 +1226,28 @@ describe('App ?seed= deep-link', () => {
     })
   })
 
+  it('sends ?candidate= as source_candidate_id and strips it from the URL', async () => {
+    let capturedBody: string | null = null
+    vi.spyOn(auth, 'getCurrentSession').mockResolvedValue(createMockSession())
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u, init) => {
+      if (init?.method === 'POST') {
+        capturedBody = init.body as string
+        return new Response(
+          JSON.stringify({ session_id: 's1', reply: 'hi', status: 'gathering', turn_count: 1, min_turns: 3, max_turns: 5, can_finalise: false }),
+          { status: 200 },
+        )
+      }
+      return new Response(JSON.stringify([]), { status: 200 })
+    })
+    window.history.replaceState({}, '', '/api/v1/plugins/ideation/ui/?seed=an%20idea&candidate=cand-42')
+    render(<App />)
+    await screen.findByLabelText('Your idea')
+    await waitFor(() => expect(window.location.search).toBe(''))
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(JSON.parse(capturedBody!)).toEqual({ seed_idea: 'an idea', source_candidate_id: 'cand-42' })
+  })
+
   it('does not overwrite the founder editing the prefilled idea', async () => {
     const box = await renderWithUrl('?seed=an%20idea')
 

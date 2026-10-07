@@ -94,6 +94,7 @@ export interface BrainstormIntake {
   target?: string
   geography?: string
   problem?: string
+  source_candidate_id?: string
 }
 
 export interface BrainstormState {
@@ -145,6 +146,18 @@ export interface BrainstormOpportunity {
   evidence: { url: string; note?: string }[]
 }
 
+export interface ResearchFinding {
+  signal: string
+  why_it_matters: string
+  sources: { url: string; note?: string }[]
+}
+
+export interface ResearchAngle {
+  angle: string
+  status: 'succeeded' | 'failed' | 'malformed' | 'never_started' | 'running'
+  findings: ResearchFinding[]
+}
+
 export type Api = ReturnType<typeof createApi>
 
 // Async on purpose: the token is resolved per request, not snapshotted, so an
@@ -175,10 +188,15 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
   }
 
   return {
-    startSession: (seed_idea: string, challenger_agent_key?: string | null) =>
+    startSession: (
+      seed_idea: string,
+      challenger_agent_key?: string | null,
+      source_candidate_id?: string | null,
+    ) =>
       request<TurnResponse>('POST', '/sessions', {
         seed_idea,
         ...(challenger_agent_key != null ? { challenger_agent_key } : {}),
+        ...(source_candidate_id ? { source_candidate_id } : {}),
       }),
     sendMessage: (id: string, message: string) =>
       request<TurnResponse>('POST', `/sessions/${id}/messages`, { message }),
@@ -204,6 +222,8 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
       request<BrainstormState>('POST', `/brainstorm/sessions/${id}/finalise`),
     getBrainstorm: (id: string) =>
       request<BrainstormState>('GET', `/brainstorm/sessions/${id}`),
+    getBrainstormResearch: (id: string) =>
+      request<{ research: ResearchAngle[] }>('GET', `/brainstorm/sessions/${id}/research`),
     getBrainstormOpportunities: (id: string) =>
       request<{ opportunities: BrainstormOpportunity[] }>(
         'GET',
