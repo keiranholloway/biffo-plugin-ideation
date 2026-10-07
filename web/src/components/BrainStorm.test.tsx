@@ -212,3 +212,77 @@ describe('BrainStorm history', () => {
     await waitFor(() => expect(screen.queryByText('Clinics')).not.toBeInTheDocument())
   })
 })
+
+describe('BrainStorm research section', () => {
+  const research = [
+    {
+      angle: 'pain',
+      status: 'succeeded',
+      findings: [
+        {
+          signal: 'Clinics lose revenue to no-shows',
+          why_it_matters: 'Owners feel it weekly',
+          sources: [{ url: 'https://example.com/a', note: 'survey' }],
+        },
+      ],
+    },
+    { angle: 'market', status: 'succeeded', findings: [] },
+    { angle: 'workflow', status: 'failed', findings: [] },
+    { angle: 'trend', status: 'malformed', findings: [] },
+    { angle: 'economics', status: 'never_started', findings: [] },
+    { angle: 'contrarian', status: 'succeeded', findings: [] },
+  ]
+  const opp = { id: 'o1', rank: 1, title: 'Slot filler', pitch: 'Fill no-shows', rationale: null, evidence: [] }
+  const base = { ...state, session_id: 'b', title: 'Vets', created_at: '2026-09-01T10:00:00Z' }
+
+  it('renders opportunities and per-angle research, including empty and failed angles', async () => {
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue([{ ...base, status: 'complete' }]),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...base, status: 'complete' }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({ messages: [] }),
+      getBrainstormOpportunities: vi.fn().mockResolvedValue({ opportunities: [opp] }),
+      getBrainstormResearch: vi.fn().mockResolvedValue({ research }),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByText('Vets'))
+    await waitFor(() => expect(screen.getByText('Slot filler')).toBeInTheDocument())
+    expect(screen.getByText('Clinics lose revenue to no-shows')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'https://example.com/a' })).toBeInTheDocument()
+    expect(screen.getAllByText('This angle returned no findings.')).toHaveLength(2)
+    expect(screen.getByText('This angle failed.')).toBeInTheDocument()
+    expect(screen.getByText('This angle returned output we could not read.')).toBeInTheDocument()
+    expect(screen.getByText('This angle never started.')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3, name: /Pain|Market|Workflow|Trend|Economics|Contrarian/ })).toHaveLength(6)
+  })
+
+  it('shows the research of a session that failed at synthesis', async () => {
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue([{ ...base, status: 'failed' }]),
+      getBrainstorm: vi
+        .fn()
+        .mockResolvedValue({ ...base, status: 'failed', failure_reason: 'Ranking fell over' }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({ messages: [] }),
+      getBrainstormResearch: vi.fn().mockResolvedValue({ research }),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByText('Vets'))
+    await waitFor(() => expect(screen.getByText('Ranking fell over')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText('Clinics lose revenue to no-shows')).toBeInTheDocument(),
+    )
+  })
+
+  it('shows no research block when a failed session has no successful angle', async () => {
+    const none = research.map((r) => ({ ...r, status: 'failed', findings: [] }))
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue([{ ...base, status: 'failed' }]),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...base, status: 'failed', failure_reason: 'Nope' }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({ messages: [] }),
+      getBrainstormResearch: vi.fn().mockResolvedValue({ research: none }),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByText('Vets'))
+    await waitFor(() => expect(screen.getByText('Nope')).toBeInTheDocument())
+    expect(screen.queryByText('Research behind these results')).toBeNull()
+  })
+})

@@ -188,3 +188,24 @@ def test_messages_route_404s_for_another_owners_session(client, core):
     sid = client.post("/brainstorm/sessions", json={"target": "clinics"}).json()["session_id"]
     core.sessions[sid] = replace(core.sessions[sid], owner_sub="bob")
     assert client.get(f"/brainstorm/sessions/{sid}/messages").status_code == 404
+
+
+def test_research_route_404s_for_foreign_and_unknown_session(client, core):
+    sid = client.post("/brainstorm/sessions", json={"target": "a"}).json()["session_id"]
+    core.sessions[sid] = replace(core.sessions[sid], owner_sub="bob")
+    assert client.get(f"/brainstorm/sessions/{sid}/research").status_code == 404
+    assert client.get("/brainstorm/sessions/nope/research").status_code == 404
+
+
+def test_research_route_returns_all_six_angles(client, core):
+    sid = client.post("/brainstorm/sessions", json={"target": "a"}).json()["session_id"]
+
+    async def _none(*, run_id):
+        return None
+
+    core.get_agent_run = _none  # type: ignore[attr-defined]
+    resp = client.get(f"/brainstorm/sessions/{sid}/research")
+    assert resp.status_code == 200
+    rows = resp.json()["research"]
+    assert len(rows) == 6
+    assert all(r["status"] == "never_started" and r["findings"] == [] for r in rows)

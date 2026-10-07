@@ -20,12 +20,14 @@ from typing import Any
 from pydantic import ValidationError
 
 from .brainstorm_definitions import (
+    FINDINGS_TOOL_NAME,
     MAX_OPPORTUNITIES,
     OPPORTUNITIES_TOOL_NAME,
     QUALIFIER_AGENT_NAME,
     QUALIFIER_MAX_TURNS,
     RESEARCH_AGENT_NAMES,
     SYNTHESIS_AGENT_NAME,
+    FindingSet,
     OpportunitySet,
     findings_tool_schema,
     parse_brief_state,
@@ -340,6 +342,11 @@ class MalformedOpportunitiesError(IdeationError):
     the service and recorded as a failed *session*, not raised to the caller."""
 
 
+class MalformedFindingsError(IdeationError):
+    """A research run finished without a valid findings call. Reported as that
+    angle's status, never raised to the caller."""
+
+
 def visible_turns(
     raw: list[dict[str, Any]], *, strip_brief_state: bool = False
 ) -> list[dict[str, str]]:
@@ -386,6 +393,32 @@ def extract_opportunities(run_messages: list[dict[str, Any]]) -> OpportunitySet:
         return OpportunitySet.model_validate(found)
     except ValidationError as exc:
         raise MalformedOpportunitiesError(str(exc)) from exc
+
+
+def extract_findings(run_messages: list[dict[str, Any]]) -> FindingSet:
+    """Pull one research agent's findings out of its run transcript (the last
+    call to the findings tool). Raises :class:`MalformedFindingsError` if
+    missing or invalid."""
+    found: Any = None
+    for message in run_messages:
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            if function.get("name") != FINDINGS_TOOL_NAME:
+                continue
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                try:
+                    found = json.loads(arguments)
+                except json.JSONDecodeError:
+                    continue
+            else:
+                found = arguments
+    if found is None:
+        raise MalformedFindingsError(f"the run produced no {FINDINGS_TOOL_NAME} tool call")
+    try:
+        return FindingSet.model_validate(found)
+    except ValidationError as exc:
+        raise MalformedFindingsError(str(exc)) from exc
 
 
 class BrainstormService:
@@ -447,6 +480,36 @@ class BrainstormService:
         return await self._core.list_brainstorm_opportunities(
             owner_sub=owner_sub, session_id=session_id
         )
+
+    async def get_research(self, *, owner_sub: str, session_id: str) -> list[dict[str, Any]]:
+        """One entry per research angle: its status (``succeeded``, ``failed``,
+        ``malformed``, ``never_started`` or ``running``) and its findings (empty
+        unless it succeeded). An angle is never left out."""
+        session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        run_ids = list(session.research_run_ids or [])
+        out: list[dict[str, Any]] = []
+        for i, agent_name in enumerate(RESEARCH_AGENT_NAMES):
+            angle = agent_name.removeprefix("ideation-brainstorm-")
+            status = "never_started"
+            findings: list[dict[str, Any]] = []
+            run_id = run_ids[i] if i < len(run_ids) else None
+            view = await self._core.get_agent_run(run_id=run_id) if run_id else None
+            if view is not None:
+                if not view.is_terminal:
+                    status = "running"
+                elif view.never_started:
+                    status = "never_started"
+                elif not view.succeeded:
+                    status = "failed"
+                else:
+                    try:
+                        fs = extract_findings(view.messages)
+                        status = "succeeded"
+                        findings = [f.model_dump() for f in fs.findings]
+                    except MalformedFindingsError:
+                        status = "malformed"
+            out.append({"angle": angle, "status": status, "findings": findings})
+        return out
 
     async def get_messages(self, *, owner_sub: str, session_id: str) -> list[dict[str, str]]:
         """The visible transcript of the founder's own brain-storm, with the
