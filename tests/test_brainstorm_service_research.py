@@ -415,3 +415,17 @@ async def test_get_research_is_owner_scoped() -> None:
     await _researching(core)
     with pytest.raises(SessionNotFoundError):
         await _svc(core).get_research(owner_sub="bob", session_id="b1")
+
+
+def test_extract_findings_rejects_schema_invalid_payload():
+    from ideation.service import MalformedFindingsError, extract_findings
+
+    messages = [
+        {
+            "tool_calls": [
+                {"function": {"name": FINDINGS_TOOL_NAME, "arguments": {"unexpected": "shape"}}}
+            ]
+        }
+    ]
+    with pytest.raises(MalformedFindingsError):
+        extract_findings(messages)
