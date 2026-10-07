@@ -196,3 +196,17 @@ the 5-milestone decomposition comment with `Depends-on:` lines matching the depe
 above, label `epic-plan-proposed` (labels were just backfilled onto this repo today,
 confirmed present). The fleet's existing triage → ready → implement → prosecute → merge
 pipeline builds each milestone once `epic-approved` is applied.
+
+## Research durability and live verification (issue #251 follow-up)
+
+- **Core agent-run retention: not confirmed, and no longer relevant.** Nothing in this
+  repo states whether Core purges agent-run messages. Per the owner's decision
+  (persist findings on the session regardless), the plugin stores the extracted
+  per-angle research (`angle`, `status`, `findings`) in the session's
+  `research_findings` column once the research runs have all finished.
+  `get_research` reads that stored copy first and only falls back to re-reading the
+  runs for sessions that predate the column or are still researching. The research
+  therefore survives any Core retention schedule and a later synthesis failure.
+- **Live-on-dev check:** run by the owner's side after this is deployed (take a
+  brain-storm to `complete`, leave, reopen from history, read the opportunities and
+  the research). Not run by the implementer; record the result on the issue.
