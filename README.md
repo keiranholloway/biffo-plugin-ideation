@@ -23,8 +23,14 @@ Two Core-owned tables (declared here, deployed by Core; `id`/`tenant_id`/
 - **`ideation_sessions`** — one per idea: `owner_sub`, `title`, `seed_idea`,
   `status` (`gathering → analysing → complete`), `thread_id` (the run thread
   carrying the chat transcript — ADR-0016 §2), `turn_count` (the 3–5 cap),
-  `analysis_run_id`.
+  `analysis_run_id`, `source_candidate_id` (the Idea Scout candidate the session was
+  started from; null otherwise). `brainstorm_sessions` carries the same column.
 - **`ideation_reports`** — `session_id`, `prd` (JSON), `scorecard` (JSON), `model`.
+
+`system:idea-scout` is granted owner-scoped read on sessions, reports and
+Brain-Storm research (`owner_scoped_service.allowed_principals`). The linked
+content for a candidate is read via `GET /linked/{candidate_id}` (404 if none).
+The columns are added by Core's manifest-generated migration.
 
 All CRUD permissions are **closed**: access is owner-scoped through the module's
 orchestration on Core's chat spine, never the tenant-scoped generic-CRUD layer.

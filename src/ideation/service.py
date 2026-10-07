@@ -162,6 +162,7 @@ class IdeationService:
         seed_idea: str,
         challenger_agent_key: str | None = None,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> Session:
         """Open a session for a founder's idea, in the gathering phase, with a
         fresh run thread to carry the conversation. The idea itself is not put in
@@ -172,13 +173,29 @@ class IdeationService:
         re-resolved later) — an admin editing or deactivating an agent must
         never change the behavior of a session already in flight. Defaults to
         the built-in seed challenger for a founder who didn't pick one."""
+        extra: dict[str, Any] = {}
+        if source_candidate_id:
+            extra["source_candidate_id"] = source_candidate_id
         return await self._core.create_session(
             owner_sub=owner_sub,
             seed_idea=seed_idea.strip(),
             thread_id=str(uuid.uuid4()),
             challenger_agent_key=challenger_agent_key or CHALLENGER_AGENT_NAME,
             owner_email=owner_email,
+            **extra,
         )
+
+    async def list_linked_sessions(self, *, owner_sub: str, candidate_id: str) -> list[Session]:
+        """This owner's non-deleted sessions started from the given Idea Scout
+        candidate. Sessions with no ``source_candidate_id`` never match, and the
+        listing is the owner-scoped one, so another owner's sessions can't appear."""
+        if not candidate_id:
+            return []
+        return [
+            s
+            for s in await self.list_sessions(owner_sub=owner_sub)
+            if s.source_candidate_id is not None and s.source_candidate_id == candidate_id
+        ]
 
     async def list_active_challengers(self) -> list[dict[str, Any]]:
         """The active challenger roster for a founder's seed-view picker —
@@ -440,11 +457,16 @@ class BrainstormService:
         problem: str | None = None,
         title: str | None = None,
         owner_email: str | None = None,
+        source_candidate_id: str | None = None,
     ) -> BrainstormSession:
         def clean(v: str | None) -> str | None:
             return (v or "").strip() or None
 
+        extra: dict[str, Any] = {}
+        if clean(source_candidate_id):
+            extra["source_candidate_id"] = clean(source_candidate_id)
         return await self._core.create_brainstorm_session(
+            **extra,
             owner_sub=owner_sub,
             target=clean(target),
             geography=clean(geography),
@@ -453,6 +475,18 @@ class BrainstormService:
             title=clean(title),
             owner_email=clean(owner_email),
         )
+
+    async def list_linked_sessions(
+        self, *, owner_sub: str, candidate_id: str
+    ) -> list[BrainstormSession]:
+        """This owner's brainstorms started from the given Idea Scout candidate."""
+        if not candidate_id:
+            return []
+        return [
+            s
+            for s in await self.list_sessions(owner_sub=owner_sub)
+            if s.source_candidate_id is not None and s.source_candidate_id == candidate_id
+        ]
 
     async def _load_owned(self, *, owner_sub: str, session_id: str) -> BrainstormSession:
         session = await self._core.get_brainstorm_session(

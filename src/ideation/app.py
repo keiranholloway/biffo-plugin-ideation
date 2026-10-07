@@ -18,6 +18,7 @@ Mangum handler.
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 
 from biffo_plugin_sdk import ForwardedUser, require_group
 from fastapi import Depends, FastAPI, HTTPException
@@ -177,6 +178,10 @@ class StartSessionRequest(BaseModel):
     #: built-in seed challenger. Never trusted as anything but a lookup key;
     #: Core resolves the actual prompt server-side (ADR-0016 §1).
     challenger_agent_key: str | None = None
+    #: The Idea Scout candidate this session was started from (the companion to
+    #: ``?seed=``). Recorded on the session so Idea Scout can read the linked
+    #: report back. Omitted for sessions not started from Idea Scout.
+    source_candidate_id: str | None = Field(default=None, max_length=200)
 
 
 class MessageRequest(BaseModel):
@@ -272,6 +277,7 @@ async def start_session(
         seed_idea=body.seed_idea,
         challenger_agent_key=body.challenger_agent_key,
         owner_email=email_from_token(founder.token),
+        source_candidate_id=body.source_candidate_id,
     )
     turn = await svc.chat_turn(
         owner_sub=founder.sub, session_id=session.id, user_message=body.seed_idea
@@ -365,6 +371,7 @@ class StartBrainstormRequest(BaseModel):
     target: str | None = Field(default=None, max_length=4_000)
     geography: str | None = Field(default=None, max_length=4_000)
     problem: str | None = Field(default=None, max_length=8_000)
+    source_candidate_id: str | None = Field(default=None, max_length=200)
 
 
 def _bs_state(session) -> dict:  # type: ignore[no-untyped-def]
@@ -418,6 +425,7 @@ async def start_brainstorm_session(
         geography=body.geography,
         problem=body.problem,
         owner_email=email_from_token(founder.token),
+        source_candidate_id=body.source_candidate_id,
     )
     turn = await svc.chat_turn(owner_sub=founder.sub, session_id=session.id, user_message=opening)
     state = await svc.get_session(owner_sub=founder.sub, session_id=session.id)
@@ -517,3 +525,51 @@ async def read_brainstorm_opportunities(
             for o in opps
         ]
     }
+
+
+@app.get("/linked/{candidate_id}")
+async def read_linked_content(
+    candidate_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: IdeationService = Depends(get_service),
+    bs: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """The Pressure Test report(s) and Brain-Storm research linked to an Idea
+    Scout candidate — the read the ``system:idea-scout`` grant exists for.
+
+    Owner-scoped: it only ever lists the caller's own rows (Core stamps the owner
+    from the forwarded token), so another owner's candidate id yields 404. Only
+    sessions that carry a matching ``source_candidate_id`` are considered; 404
+    when nothing is linked."""
+    sessions = await svc.list_linked_sessions(owner_sub=founder.sub, candidate_id=candidate_id)
+    brainstorms = await bs.list_linked_sessions(owner_sub=founder.sub, candidate_id=candidate_id)
+    if not sessions and not brainstorms:
+        raise HTTPException(status_code=404, detail="No linked content for this candidate.")
+    reports = []
+    for s in sessions:
+        reports.append(
+            {
+                "session_id": s.id,
+                "title": _display_title(s),
+                "status": s.status,
+                "report": await svc.get_report(owner_sub=founder.sub, session_id=s.id)
+                if s.status == "complete"
+                else None,
+                "transcript": await svc.get_messages(owner_sub=founder.sub, session_id=s.id),
+            }
+        )
+    research = []
+    for b in brainstorms:
+        research.append(
+            {
+                "session_id": b.id,
+                "title": b.title,
+                "status": b.status,
+                "research": await bs.get_research(owner_sub=founder.sub, session_id=b.id),
+                "opportunities": [
+                    asdict(o)
+                    for o in await bs.list_opportunities(owner_sub=founder.sub, session_id=b.id)
+                ],
+            }
+        )
+    return {"candidate_id": candidate_id, "reports": reports, "research": research}
