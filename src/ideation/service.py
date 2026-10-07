@@ -686,8 +686,9 @@ class BrainstormService:
         """Synthesis -> complete, storing the ranked opportunities."""
         if session.synthesis_run_id is None:  # pragma: no cover — guarded by the caller
             return session
+        synthesis_run_id = session.synthesis_run_id
         session = await self._snapshot_research(session)
-        view = await self._core.get_agent_run(run_id=session.synthesis_run_id)
+        view = await self._core.get_agent_run(run_id=synthesis_run_id)
         if view is not None and not view.is_terminal:
             return session  # still synthesising
         if view is not None and view.never_started:
