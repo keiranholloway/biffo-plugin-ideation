@@ -6,7 +6,7 @@ import asyncio
 import json
 from collections.abc import Iterator
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from biffo_plugin_sdk import ForwardedUser
@@ -106,8 +106,8 @@ def as_user(core: FakeCore) -> Iterator[Any]:
     app.dependency_overrides[require_founder] = lambda: ForwardedUser(
         sub=current["sub"], groups=["admin"], token="tok"
     )
-    app.dependency_overrides[get_service] = lambda: IdeationService(core)
-    app.dependency_overrides[get_brainstorm_service] = lambda: BrainstormService(core)
+    app.dependency_overrides[get_service] = lambda: IdeationService(cast(Any, core))
+    app.dependency_overrides[get_brainstorm_service] = lambda: BrainstormService(cast(Any, core))
     client = TestClient(app)
 
     def switch(sub: str) -> TestClient:
@@ -123,7 +123,7 @@ def _run(coro):
 
 
 async def _link(core: FakeCore, owner: str, candidate: str | None) -> Session:
-    s = await IdeationService(core).start_session(
+    s = await IdeationService(cast(Any, core)).start_session(
         owner_sub=owner, seed_idea="idea", source_candidate_id=candidate
     )
     core.sessions[s.id] = replace(s, status=COMPLETE)
@@ -138,7 +138,7 @@ async def _link(core: FakeCore, owner: str, candidate: str | None) -> Session:
 def test_same_owner_gets_linked_report_transcript_and_research(core, as_user):
     _run(_link(core, "alice", "cand-1"))
     _run(
-        BrainstormService(core).start_session(
+        BrainstormService(cast(Any, core)).start_session(
             owner_sub="alice", problem="x", source_candidate_id="cand-1"
         )
     )
@@ -181,6 +181,7 @@ async def _adapter_case():
 
     class T:
         async def request(self, method, path, *, json=None, params=None):
+            assert json is not None
             sent.append(json)
             return {
                 "id": "1", "owner_sub": "a", "seed_idea": "i", "status": "gathering",
