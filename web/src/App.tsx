@@ -339,24 +339,30 @@ export default function App() {
   const activeSessionId = view.kind === 'live' || view.kind === 'report' ? view.sessionId : null
 
   if (tab === 'brain-storm') {
+    const header = (
+      <>
+        <h1>Ideation Engine</h1>
+        <TabBar tab={tab} onChange={setTab} />
+      </>
+    )
+    if (!api) {
+      return (
+        <div className="ide-layout">
+          <main className="ide">{header}</main>
+        </div>
+      )
+    }
     return (
-      <div className="ide-layout">
-        <main className="ide">
-          <h1>Ideation Engine</h1>
-          <TabBar tab={tab} onChange={setTab} />
-          {api && (
-            <BrainStorm
-              api={api}
-              sourceCandidateId={candidateId || undefined}
-              onPressureTest={(s) => {
-                setSeed(s.slice(0, MAX_SEED_LENGTH))
-                setView({ kind: 'new' })
-                setTab('pressure-test')
-              }}
-            />
-          )}
-        </main>
-      </div>
+      <BrainStorm
+        api={api}
+        header={header}
+        sourceCandidateId={candidateId || undefined}
+        onPressureTest={(s) => {
+          setSeed(s.slice(0, MAX_SEED_LENGTH))
+          setView({ kind: 'new' })
+          setTab('pressure-test')
+        }}
+      />
     )
   }
 

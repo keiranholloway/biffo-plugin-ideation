@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
+import type { ReactNode } from 'react'
+
 import { ChatComposer } from './ChatComposer'
+import { Sidebar } from './Sidebar'
 import {
   ApiError,
   type Api,
@@ -135,10 +138,13 @@ export function BrainStorm({
   api,
   sourceCandidateId,
   onPressureTest,
+  header,
 }: {
   api: Api
   sourceCandidateId?: string
   onPressureTest?: (seed: string) => void
+  /** Rendered at the top of the main pane (title and tab bar), beside the history column. */
+  header?: ReactNode
 }) {
   const [target, setTarget] = useState('')
   const [geography, setGeography] = useState('')
@@ -181,11 +187,12 @@ export function BrainStorm({
     }
   }
 
-  // The history list is shown on the intake view; refresh it whenever we land there.
-  const hasSession = session !== null
+  // The history column stays visible; load it on mount, and refresh when a
+  // new session first appears (start) or we return to the intake form.
+  const sessionIdForList = session?.session_id ?? null
   useEffect(() => {
-    if (!hasSession) void loadHistory()
-  }, [api, hasSession])
+    void loadHistory()
+  }, [api, sessionIdForList])
 
   // Research is shown for complete sessions and for failed ones that kept some.
   // A failure to read it must not hide the rest of the view.
@@ -226,6 +233,7 @@ export function BrainStorm({
     if (!window.confirm(`Delete "${historyTitle(summary)}"? This can't be undone from here.`)) return
     try {
       await api.deleteBrainstorm(summary.session_id)
+      if (session?.session_id === summary.session_id) reset()
       await loadHistory()
     } catch (e) {
       setError(errorText(e))
@@ -343,6 +351,28 @@ export function BrainStorm({
   }
 
   return (
+    <div className="ide-layout">
+      <Sidebar
+        sessions={history}
+        activeId={session?.session_id ?? null}
+        onSelect={(h) => void open(h)}
+        onNewIdea={reset}
+        onDelete={(h) => void remove(h)}
+        loadFailed={historyFailed}
+        loaded={historyLoaded}
+        getId={(h) => h.session_id}
+        getTitle={historyTitle}
+        getStatus={(h) => h.status}
+        getDate={(h) => h.created_at}
+        newLabel="New brain-storm"
+        loadingText="Loading your past brain-storms…"
+        emptyText="No past brain-storms yet"
+        failedText="Couldn&apos;t load your past brain-storms"
+        deleteLabel={(h) => `Delete ${historyTitle(h)}`}
+        disabled={busy}
+      />
+      <main className="ide">
+        {header}
     <section className="ide-brainstorm">
       {error && <div className="ide-error">{error}</div>}
 
@@ -383,41 +413,6 @@ export function BrainStorm({
           <button onClick={() => void start()} disabled={busy || !canStart}>
             {busy ? 'Starting…' : 'Start brain-storm'}
           </button>
-        </div>
-      )}
-
-      {!session && (
-        <div className="ide-history">
-          <h2>Your past brain-storms</h2>
-          {historyFailed && history.length === 0 ? (
-            <p role="status">Couldn&apos;t load your past brain-storms</p>
-          ) : !historyLoaded ? (
-            <p role="status">Loading your past brain-storms…</p>
-          ) : history.length === 0 ? (
-            <p>No past brain-storms yet</p>
-          ) : (
-            <ul className="ide-history-list">
-              {history.map((h) => (
-                <li key={h.session_id} className="ide-history-row">
-                  <button type="button" className="ide-history-item" onClick={() => void open(h)} disabled={busy}>
-                    <span className="ide-history-title">{historyTitle(h)}</span>
-                    <span className="ide-history-status">{h.status}</span>
-                    <span className="ide-history-date">
-                      {h.created_at ? new Date(h.created_at).toLocaleDateString() : ''}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="ide-history-delete"
-                    aria-label={`Delete ${historyTitle(h)}`}
-                    onClick={() => void remove(h)}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 
@@ -544,5 +539,7 @@ export function BrainStorm({
         </div>
       )}
     </section>
+      </main>
+    </div>
   )
 }

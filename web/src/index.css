@@ -39,6 +39,9 @@ body { margin: 0; }
 .ide-sidebar-item-status--complete { background: var(--state-positive-soft); color: var(--state-positive); }
 .ide-sidebar-item-status--gathering { background: var(--state-caution-soft); color: var(--state-caution); }
 .ide-sidebar-item-status--analysing { background: var(--brand-soft); color: var(--brand-strong); }
+.ide-sidebar-item-status--qualifying { background: var(--state-caution-soft); color: var(--state-caution); }
+.ide-sidebar-item-status--researching, .ide-sidebar-item-status--synthesising { background: var(--brand-soft); color: var(--brand-strong); }
+.ide-sidebar-item-status--failed { background: #fdecec; color: #8a1c1c; }
 .ide-sidebar-empty { color: var(--text-muted); font-size: .9rem; margin: 1rem 0; }
 .ide-sidebar-empty--error { color: #8a1c1c; }
 .ide { max-width: 760px; margin: 0 auto; padding: 2rem 1.25rem 4rem; flex: 1; }

@@ -211,6 +211,64 @@ describe('BrainStorm history', () => {
     await waitFor(() => expect(api.deleteBrainstorm).toHaveBeenCalledWith('a'))
     await waitFor(() => expect(screen.queryByText('Clinics')).not.toBeInTheDocument())
   })
+
+  it('shows loading, then empty, in the left column', async () => {
+    let resolve: (v: unknown[]) => void = () => {}
+    const api = {
+      listBrainstorms: vi.fn().mockReturnValue(new Promise((r) => (resolve = r))),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    expect(screen.getByText('Loading your past brain-storms…')).toBeInTheDocument()
+    resolve([])
+    await waitFor(() => expect(screen.getByText('No past brain-storms yet')).toBeInTheDocument())
+    expect(document.querySelector('nav.ide-sidebar')).not.toBeNull()
+  })
+
+  it('says the load failed rather than empty', async () => {
+    const api = { listBrainstorms: vi.fn().mockRejectedValue(new Error('boom')) } as unknown as Api
+    render(<BrainStorm api={api} />)
+    await waitFor(() => expect(screen.getByText(/Couldn.t load your past brain-storms/)).toBeInTheDocument())
+    expect(screen.queryByText('No past brain-storms yet')).toBeNull()
+  })
+
+  it('keeps the column visible, highlights the open row and resets via the new button', async () => {
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue(past),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...past[0], turn_count: 2 }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({ messages: [{ role: 'assistant', content: 'Who pays?' }] }),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByText('Clinics'))
+    await waitFor(() => expect(screen.getByText('Who pays?')).toBeInTheDocument())
+    const row = screen.getByText('Clinics').closest('button')!
+    expect(row).toHaveClass('ide-sidebar-item--active')
+    expect(screen.getByText('Vets').closest('button')).not.toHaveClass('ide-sidebar-item--active')
+    expect(screen.queryByText('Your past brain-storms')).toBeNull()
+
+    const nav = document.querySelector('nav.ide-sidebar') as HTMLElement
+    fireEvent.click(nav.querySelector('.ide-sidebar-new')!)
+    await waitFor(() => expect(screen.getByLabelText('Target company or industry')).toBeInTheDocument())
+    expect(screen.queryByText('Who pays?')).toBeNull()
+  })
+
+  it('deleting the open brain-storm returns to intake; deleting another keeps the view', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const api = {
+      listBrainstorms: vi.fn().mockResolvedValue(past),
+      getBrainstorm: vi.fn().mockResolvedValue({ ...past[0], turn_count: 2 }),
+      getBrainstormMessages: vi.fn().mockResolvedValue({ messages: [{ role: 'assistant', content: 'Who pays?' }] }),
+      deleteBrainstorm: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Api
+    render(<BrainStorm api={api} />)
+    fireEvent.click(await screen.findByText('Clinics'))
+    await waitFor(() => expect(screen.getByText('Who pays?')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Vets' }))
+    await waitFor(() => expect(api.deleteBrainstorm).toHaveBeenCalledWith('b'))
+    expect(screen.getByText('Who pays?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Clinics' }))
+    await waitFor(() => expect(api.deleteBrainstorm).toHaveBeenCalledWith('a'))
+    await waitFor(() => expect(screen.getByLabelText('Target company or industry')).toBeInTheDocument())
+  })
 })
 
 describe('BrainStorm research section', () => {
