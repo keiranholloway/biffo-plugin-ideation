@@ -95,6 +95,12 @@
           "type": "String(320)",
           "nullable": true,
           "description": "The owner's email, recorded at creation from the verified token's claims so the admin dashboard can show who ran a session. Null for sessions created before this column existed."
+        },
+        {
+          "name": "source_candidate_id",
+          "type": "String(200)",
+          "nullable": true,
+          "description": "The Idea Scout candidate this session was started from (set from the candidate-id parameter alongside ?seed=). Null for sessions not started from Idea Scout; those are never returned by the linked-content read."
         }
       ],
       "indexes": [
@@ -110,6 +116,14 @@
           "columns": [
             "tenant_id",
             "thread_id"
+          ]
+        },
+        {
+          "name": "idx_ideation_sessions_candidate",
+          "columns": [
+            "tenant_id",
+            "owner_sub",
+            "source_candidate_id"
           ]
         }
       ],
@@ -133,7 +147,8 @@
       "owner_scoped_service": {
         "owner_column": "owner_sub",
         "allowed_principals": [
-          "system:ideation"
+          "system:ideation",
+          "system:idea-scout"
         ]
       }
     },
@@ -208,7 +223,8 @@
       "owner_scoped_service": {
         "owner_column": "owner_sub",
         "allowed_principals": [
-          "system:ideation"
+          "system:ideation",
+          "system:idea-scout"
         ]
       }
     },
@@ -310,6 +326,12 @@
           "type": "Boolean",
           "nullable": true,
           "description": "Soft-delete flag. True means the founder removed this session; the row is never destroyed, just excluded from list_brainstorm_sessions. Nullable for the same declared-default reason as status \u2014 treat NULL as false."
+        },
+        {
+          "name": "source_candidate_id",
+          "type": "String(200)",
+          "nullable": true,
+          "description": "The Idea Scout candidate this brainstorm was started from. Null otherwise."
         }
       ],
       "indexes": [
@@ -325,6 +347,14 @@
           "columns": [
             "tenant_id",
             "chain_id"
+          ]
+        },
+        {
+          "name": "idx_brainstorm_sessions_candidate",
+          "columns": [
+            "tenant_id",
+            "owner_sub",
+            "source_candidate_id"
           ]
         }
       ],
@@ -348,7 +378,8 @@
       "owner_scoped_service": {
         "owner_column": "owner_sub",
         "allowed_principals": [
-          "system:ideation"
+          "system:ideation",
+          "system:idea-scout"
         ]
       }
     },
@@ -440,7 +471,8 @@
       "owner_scoped_service": {
         "owner_column": "owner_sub",
         "allowed_principals": [
-          "system:ideation"
+          "system:ideation",
+          "system:idea-scout"
         ]
       }
     },
@@ -451,7 +483,7 @@
           "name": "model_id",
           "type": "String(200)",
           "nullable": false,
-          "description": "An OpenRouter model id (e.g. 'deepseek/deepseek-v4-flash'). Not validated server-side against OpenRouter's own catalog — the admin UI is expected to check that at entry time."
+          "description": "An OpenRouter model id (e.g. 'deepseek/deepseek-v4-flash'). Not validated server-side against OpenRouter's own catalog \u2014 the admin UI is expected to check that at entry time."
         },
         {
           "name": "label",
@@ -463,19 +495,19 @@
           "name": "active",
           "type": "Boolean",
           "nullable": true,
-          "description": "Whether this model is offered as a choice today. Nullable because the generated migration DDL does not apply declared defaults (only the in-process model, per the plugin-template README's 'Known limitations') — treat NULL as false; every create request must set it explicitly."
+          "description": "Whether this model is offered as a choice today. Nullable because the generated migration DDL does not apply declared defaults (only the in-process model, per the plugin-template README's 'Known limitations') \u2014 treat NULL as false; every create request must set it explicitly."
         },
         {
           "name": "is_default",
           "type": "Boolean",
           "nullable": true,
-          "description": "The default model a new agent is created with. Exactly one row should have this true at a time — enforced by the admin UI, not the database (this table has no custom application code to enforce it server-side)."
+          "description": "The default model a new agent is created with. Exactly one row should have this true at a time \u2014 enforced by the admin UI, not the database (this table has no custom application code to enforce it server-side)."
         },
         {
           "name": "web_capable",
           "type": "Boolean",
           "nullable": true,
-          "description": "Whether this model can search the web (issue #92) — for OpenRouter, whether model_id carries the ':online' suffix. Declared explicitly rather than derived at read time so a future provider with a different mechanism still fits. Nullable because the generated migration DDL does not apply declared defaults — treat NULL as false; every create request must set it explicitly. ModelSelect filters to these entries for an agent whose role requires search, and flags a stored selection that is not web-capable rather than silently rewriting it."
+          "description": "Whether this model can search the web (issue #92) \u2014 for OpenRouter, whether model_id carries the ':online' suffix. Declared explicitly rather than derived at read time so a future provider with a different mechanism still fits. Nullable because the generated migration DDL does not apply declared defaults \u2014 treat NULL as false; every create request must set it explicitly. ModelSelect filters to these entries for an agent whose role requires search, and flags a stored selection that is not web-capable rather than silently rewriting it."
         }
       ],
       "indexes": [
