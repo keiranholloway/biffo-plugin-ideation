@@ -368,4 +368,6 @@ def test_research_findings_column_is_json_decoded() -> None:
     row = {"id": "b", "owner_sub": "a", "status": "complete"}
     assert _brainstorm_session_from_row(row).research_findings is None
     row["research_findings"] = json.dumps([{"angle": "pain", "status": "failed", "findings": []}])
-    assert _brainstorm_session_from_row(row).research_findings[0]["angle"] == "pain"
+    stored = _brainstorm_session_from_row(row).research_findings
+    assert stored is not None
+    assert stored[0]["angle"] == "pain"
