@@ -429,3 +429,25 @@ def test_extract_findings_rejects_schema_invalid_payload():
     ]
     with pytest.raises(MalformedFindingsError):
         extract_findings(messages)
+
+
+@_sync
+async def test_research_is_snapshotted_and_read_from_session_when_runs_are_gone() -> None:
+    core = FakeCore()
+    session = await _researching(core)
+    for rid in session.research_run_ids:
+        core.runs[rid] = AgentRunView(
+            id=rid, status="completed", started_at="t", messages=_findings_messages()
+        )
+    assert session.chain_id is not None
+    core.chain_runs[(session.chain_id, SYNTHESIS_AGENT_NAME)] = AgentRunView(
+        id="syn", status="running", started_at="t"
+    )
+    await _svc(core).get_session(owner_sub="alice", session_id="b1")
+    stored = core.sessions["b1"].research_findings
+    assert stored is not None and len(stored) == 6
+    assert all(r["status"] == "succeeded" for r in stored)
+
+    core.runs.clear()  # Core purged the runs
+    research = await _svc(core).get_research(owner_sub="alice", session_id="b1")
+    assert research == stored

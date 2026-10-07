@@ -224,7 +224,7 @@ class CoreGateway(Protocol):
     async def update_brainstorm_session(self, *, session_id: str, **fields: Any) -> None:
         """Patch a session row. Generic so the service can advance several fields
         together (status plus chain_id/research_run_ids, or status plus
-        failure_reason) in one call. ``brief`` and ``research_run_ids`` are
+        failure_reason) in one call. ``brief``, ``research_run_ids`` and ``research_findings`` are
         JSON-serialised by the adapter."""
         ...
 

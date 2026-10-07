@@ -486,6 +486,12 @@ class BrainstormService:
         ``malformed``, ``never_started`` or ``running``) and its findings (empty
         unless it succeeded). An angle is never left out."""
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.research_findings is not None:
+            return list(session.research_findings)
+        return await self._read_research(session)
+
+    async def _read_research(self, session: BrainstormSession) -> list[dict[str, Any]]:
+        """Read each angle's status and findings back from its agent run."""
         run_ids = list(session.research_run_ids or [])
         out: list[dict[str, Any]] = []
         for i, agent_name in enumerate(RESEARCH_AGENT_NAMES):
@@ -638,6 +644,7 @@ class BrainstormService:
             chain_id=session.chain_id, agent_name=SYNTHESIS_AGENT_NAME
         )
         if synthesis is not None:
+            session = await self._snapshot_research(session)
             await self._core.update_brainstorm_session(
                 session_id=session.id, status=BS_SYNTHESISING, synthesis_run_id=synthesis.id
             )
@@ -661,11 +668,27 @@ class BrainstormService:
             "Nothing was found to build opportunities from — try running again.",
         )
 
+    async def _snapshot_research(self, session: BrainstormSession) -> BrainstormSession:
+        """Store the per-angle research on the session once every research run has
+        finished, so it survives however long Core keeps agent-run messages (and a
+        later synthesis failure). A no-op if already stored or still running."""
+        if session.research_findings is not None or not session.research_run_ids:
+            return session
+        research = await self._read_research(session)
+        if any(r["status"] == "running" for r in research):
+            return session
+        await self._core.update_brainstorm_session(
+            session_id=session.id, research_findings=research
+        )
+        return dataclasses.replace(session, research_findings=research)
+
     async def _advance_synthesis(self, session: BrainstormSession) -> BrainstormSession:
         """Synthesis -> complete, storing the ranked opportunities."""
         if session.synthesis_run_id is None:  # pragma: no cover — guarded by the caller
             return session
-        view = await self._core.get_agent_run(run_id=session.synthesis_run_id)
+        synthesis_run_id = session.synthesis_run_id
+        session = await self._snapshot_research(session)
+        view = await self._core.get_agent_run(run_id=synthesis_run_id)
         if view is not None and not view.is_terminal:
             return session  # still synthesising
         if view is not None and view.never_started:
