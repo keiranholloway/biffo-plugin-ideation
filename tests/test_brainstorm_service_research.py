@@ -432,12 +432,16 @@ def test_extract_findings_rejects_schema_invalid_payload():
 
 
 @_sync
-async def test_research_is_snapshotted_and_read_from_session_when_runs_are_gone() -> None:
+async def test_findings_are_stored_when_research_finishes_and_survive_run_purge() -> None:
     core = FakeCore()
     session = await _researching(core)
-    for rid in session.research_run_ids:
+    ids = session.research_run_ids
+    for i, rid in enumerate(ids):
         core.runs[rid] = AgentRunView(
-            id=rid, status="completed", started_at="t", messages=_findings_messages()
+            id=rid,
+            status="completed" if i else "failed",
+            started_at="t",
+            messages=_findings_messages() if i else [],
         )
     assert session.chain_id is not None
     core.chain_runs[(session.chain_id, SYNTHESIS_AGENT_NAME)] = AgentRunView(
@@ -446,8 +450,9 @@ async def test_research_is_snapshotted_and_read_from_session_when_runs_are_gone(
     await _svc(core).get_session(owner_sub="alice", session_id="b1")
     stored = core.sessions["b1"].research_findings
     assert stored is not None and len(stored) == 6
-    assert all(r["status"] == "succeeded" for r in stored)
 
-    core.runs.clear()  # Core purged the runs
+    core.runs.clear()  # Core purged the run messages
     research = await _svc(core).get_research(owner_sub="alice", session_id="b1")
     assert research == stored
+    assert research[0]["status"] == "failed" and research[0]["findings"] == []
+    assert research[1]["findings"][0]["signal"] == "s1"

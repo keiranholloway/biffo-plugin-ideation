@@ -660,6 +660,7 @@ class BrainstormService:
             # moment to react to the completion event — don't race it to a
             # false failure.
             return session
+        session = await self._snapshot_research(session)
         if views and all(v is not None and v.never_started for v in views):
             return await self._fail(session, self.NEVER_STARTED_REASON)
         return await self._fail(
