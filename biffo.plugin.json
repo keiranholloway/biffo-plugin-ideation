@@ -282,6 +282,12 @@
           "description": "The async agent-runtime run ids of the parallel research agents, as a JSON array string. Text for the same no-JSON-type reason as brief."
         },
         {
+          "name": "research_findings",
+          "type": "Text",
+          "nullable": true,
+          "description": "The per-angle research findings (angle, status, findings) extracted from the research runs when research finished, as a JSON array string, so they stay reachable independent of Core's agent-run retention. Null for sessions that predate it."
+        },
+        {
           "name": "synthesis_run_id",
           "type": "String(36)",
           "nullable": true,

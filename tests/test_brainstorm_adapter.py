@@ -360,3 +360,12 @@ def test_create_brainstorm_session_records_owner_email_and_reads_it_back():
     )
     assert t.call("POST", _BS)["json"]["owner_email"] == "a@b.com"
     assert s.owner_email == "a@b.com"
+
+
+def test_research_findings_column_is_json_decoded() -> None:
+    from ideation.adapter import _brainstorm_session_from_row
+
+    row = {"id": "b", "owner_sub": "a", "status": "complete"}
+    assert _brainstorm_session_from_row(row).research_findings is None
+    row["research_findings"] = json.dumps([{"angle": "pain", "status": "failed", "findings": []}])
+    assert _brainstorm_session_from_row(row).research_findings[0]["angle"] == "pain"

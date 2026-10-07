@@ -120,6 +120,7 @@ def _brainstorm_session_from_row(row: dict[str, Any]) -> BrainstormSession:
         chain_id=row.get("chain_id"),
         research_run_ids=_json_or(row.get("research_run_ids"), []),
         synthesis_run_id=row.get("synthesis_run_id"),
+        research_findings=_json_or(row.get("research_findings"), None),
         failure_reason=row.get("failure_reason"),
         created_at=row.get("created_at"),
         deleted=row.get("deleted") or False,
@@ -449,7 +450,7 @@ class CoreHttpGateway:
     async def update_brainstorm_session(self, *, session_id: str, **fields: Any) -> None:
         body = dict(fields)
         # Text columns holding JSON (no JSON type in Core's plugin-table map).
-        for key in ("brief", "research_run_ids"):
+        for key in ("brief", "research_run_ids", "research_findings"):
             if key in body and body[key] is not None:
                 body[key] = json.dumps(body[key])
         await self._t.request("PATCH", f"{_BS_SESSIONS}/{session_id}", json=body)

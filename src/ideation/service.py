@@ -486,6 +486,12 @@ class BrainstormService:
         ``malformed``, ``never_started`` or ``running``) and its findings (empty
         unless it succeeded). An angle is never left out."""
         session = await self._load_owned(owner_sub=owner_sub, session_id=session_id)
+        if session.research_findings is not None:
+            return list(session.research_findings)
+        return await self._read_research(session)
+
+    async def _read_research(self, session: BrainstormSession) -> list[dict[str, Any]]:
+        """Read each angle's findings back from its research run."""
         run_ids = list(session.research_run_ids or [])
         out: list[dict[str, Any]] = []
         for i, agent_name in enumerate(RESEARCH_AGENT_NAMES):
@@ -510,6 +516,17 @@ class BrainstormService:
                         status = "malformed"
             out.append({"angle": angle, "status": status, "findings": findings})
         return out
+
+    async def _store_research(self, session: BrainstormSession) -> BrainstormSession:
+        """Persist the extracted findings with the session once every research
+        run is terminal, so they no longer depend on the runs' retention."""
+        research = await self._read_research(session)
+        if any(r["status"] == "running" for r in research):
+            return session
+        await self._core.update_brainstorm_session(
+            session_id=session.id, research_findings=research
+        )
+        return dataclasses.replace(session, research_findings=research)
 
     async def get_messages(self, *, owner_sub: str, session_id: str) -> list[dict[str, str]]:
         """The visible transcript of the founder's own brain-storm, with the
@@ -638,6 +655,7 @@ class BrainstormService:
             chain_id=session.chain_id, agent_name=SYNTHESIS_AGENT_NAME
         )
         if synthesis is not None:
+            session = await self._store_research(session)
             await self._core.update_brainstorm_session(
                 session_id=session.id, status=BS_SYNTHESISING, synthesis_run_id=synthesis.id
             )
@@ -653,6 +671,7 @@ class BrainstormService:
             # moment to react to the completion event — don't race it to a
             # false failure.
             return session
+        session = await self._store_research(session)
         if views and all(v is not None and v.never_started for v in views):
             return await self._fail(session, self.NEVER_STARTED_REASON)
         return await self._fail(

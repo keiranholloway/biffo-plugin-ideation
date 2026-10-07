@@ -134,6 +134,9 @@ class BrainstormSession:
     chain_id: str | None = None
     research_run_ids: list[str] = field(default_factory=list)
     synthesis_run_id: str | None = None
+    #: The per-angle research snapshot taken when research finished (list of
+    #: ``{angle, status, findings}``); None for older sessions.
+    research_findings: list[dict[str, object]] | None = None
     failure_reason: str | None = None
     created_at: str | None = None
     deleted: bool = False
