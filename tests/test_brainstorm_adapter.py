@@ -222,6 +222,7 @@ def test_session_row_parses_json_text_columns():
         _row(
             brief=json.dumps({"target": "logistics"}),
             research_run_ids=json.dumps(["a", "b"]),
+            research_findings=json.dumps([{"angle": "pain", "status": "failed", "findings": []}]),
             chain_id="chain-1",
             deleted=None,
             turn_count=None,
@@ -231,6 +232,7 @@ def test_session_row_parses_json_text_columns():
     assert s is not None
     assert s.brief == {"target": "logistics"}
     assert s.research_run_ids == ["a", "b"]
+    assert s.research_findings == [{"angle": "pain", "status": "failed", "findings": []}]
     assert s.chain_id == "chain-1"
     assert s.deleted is False
     assert s.turn_count == 0

@@ -285,7 +285,7 @@
           "name": "research_findings",
           "type": "Text",
           "nullable": true,
-          "description": "The per-angle research findings (angle, status, findings) extracted from the research runs when research finished, as a JSON array string, so they stay reachable independent of Core's agent-run retention. Null for sessions that predate it."
+          "description": "A snapshot of the per-angle research results (angle, status, findings) as a JSON array string, stored when the research runs have all finished so the founder keeps the research regardless of how long Core retains agent-run messages. Null until then."
         },
         {
           "name": "synthesis_run_id",

@@ -133,6 +133,9 @@ class BrainstormSession:
     turn_count: int = 0
     chain_id: str | None = None
     research_run_ids: list[str] = field(default_factory=list)
+    #: Snapshot of the per-angle research (angle/status/findings), stored once the
+    #: research runs have finished. None until then.
+    research_findings: list[dict[str, object]] | None = None
     synthesis_run_id: str | None = None
     #: The per-angle research snapshot taken when research finished (list of
     #: ``{angle, status, findings}``); None for older sessions.
