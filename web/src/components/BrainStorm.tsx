@@ -133,9 +133,11 @@ function historyTitle(s: BrainstormState): string {
 
 export function BrainStorm({
   api,
+  sourceCandidateId,
   onPressureTest,
 }: {
   api: Api
+  sourceCandidateId?: string
   onPressureTest?: (seed: string) => void
 }) {
   const [target, setTarget] = useState('')
@@ -240,7 +242,9 @@ export function BrainStorm({
       ...(problem.trim() ? { problem: problem.trim() } : {}),
     }
     try {
-      const r = await api.startBrainstorm(intake)
+      const r = await api.startBrainstorm(
+        sourceCandidateId ? { ...intake, source_candidate_id: sourceCandidateId } : intake,
+      )
       const opening = [
         intake.target && `Target: ${intake.target}`,
         intake.geography && `Geography: ${intake.geography}`,

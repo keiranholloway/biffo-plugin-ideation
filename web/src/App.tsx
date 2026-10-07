@@ -39,6 +39,18 @@ function readSeedParam(): string {
   return seed ? seed.slice(0, MAX_SEED_LENGTH) : ''
 }
 
+// Idea Scout also passes ?candidate=<id> (its candidate id) alongside ?seed=.
+// It is never shown; it is sent as source_candidate_id when the founder starts
+// a session, so the session can be traced back to the candidate. Max length
+// matches the server-side field.
+const MAX_CANDIDATE_LENGTH = 200
+
+function readCandidateParam(): string {
+  if (typeof window === 'undefined') return ''
+  const c = new URLSearchParams(window.location.search).get('candidate')
+  return c ? c.trim().slice(0, MAX_CANDIDATE_LENGTH) : ''
+}
+
 function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'brain-storm', label: 'Brain-Storm' },
@@ -72,6 +84,7 @@ export default function App() {
   // Lazy initialiser: read once, at mount. After this the box belongs to the
   // founder — editing or clearing it is never overwritten by the param.
   const [seed, setSeed] = useState(readSeedParam)
+  const [candidateId] = useState(readCandidateParam)
   // Brain-Storm is the default landing tab; a ?seed= deep-link lands on
   // Pressure Test, pre-filled.
   const [tab, setTab] = useState<Tab>(() => (seed ? 'pressure-test' : 'brain-storm'))
@@ -122,8 +135,9 @@ export default function App() {
   // mid-edit doesn't re-prefill over the founder's changes.
   useEffect(() => {
     const url = new URL(window.location.href)
-    if (!url.searchParams.has('seed')) return
+    if (!url.searchParams.has('seed') && !url.searchParams.has('candidate')) return
     url.searchParams.delete('seed')
+    url.searchParams.delete('candidate')
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
   }, [])
 
@@ -238,7 +252,7 @@ export default function App() {
     setBusy(true)
     setError(null)
     try {
-      const r = await api.startSession(seed.trim(), agentKey || null)
+      const r = await api.startSession(seed.trim(), agentKey || null, candidateId || null)
       setView({ kind: 'live', sessionId: r.session_id })
       setSession(r)
       setMessages([
@@ -333,6 +347,7 @@ export default function App() {
           {api && (
             <BrainStorm
               api={api}
+              sourceCandidateId={candidateId || undefined}
               onPressureTest={(s) => {
                 setSeed(s.slice(0, MAX_SEED_LENGTH))
                 setView({ kind: 'new' })

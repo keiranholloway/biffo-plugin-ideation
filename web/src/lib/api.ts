@@ -94,6 +94,7 @@ export interface BrainstormIntake {
   target?: string
   geography?: string
   problem?: string
+  source_candidate_id?: string
 }
 
 export interface BrainstormState {
@@ -187,10 +188,15 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
   }
 
   return {
-    startSession: (seed_idea: string, challenger_agent_key?: string | null) =>
+    startSession: (
+      seed_idea: string,
+      challenger_agent_key?: string | null,
+      source_candidate_id?: string | null,
+    ) =>
       request<TurnResponse>('POST', '/sessions', {
         seed_idea,
         ...(challenger_agent_key != null ? { challenger_agent_key } : {}),
+        ...(source_candidate_id ? { source_candidate_id } : {}),
       }),
     sendMessage: (id: string, message: string) =>
       request<TurnResponse>('POST', `/sessions/${id}/messages`, { message }),

@@ -14,6 +14,17 @@ function mockFetch(status: number, body: unknown) {
 describe('createApi', () => {
   beforeEach(() => vi.restoreAllMocks())
 
+  it('sends source_candidate_id when a candidate id is given', async () => {
+    const f = mockFetch(201, { session_id: 's1', reply: 'x' })
+    await createApi(() => 'tok')
+      .startSession('an idea', null, 'cand-42')
+    const [, opts] = f.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(opts.body as string)).toEqual({
+      seed_idea: 'an idea',
+      source_candidate_id: 'cand-42',
+    })
+  })
+
   it('starts a session at /api/v1/plugins/ideation/sessions with the Bearer token', async () => {
     const f = mockFetch(201, {
       session_id: 's1',

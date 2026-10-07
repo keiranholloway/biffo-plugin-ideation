@@ -285,4 +285,15 @@ describe('BrainStorm research section', () => {
     await waitFor(() => expect(screen.getByText('Nope')).toBeInTheDocument())
     expect(screen.queryByText('Research behind these results')).toBeNull()
   })
+
+  it('sends the candidate id as source_candidate_id when provided', async () => {
+    const api = {
+      startBrainstorm: vi.fn().mockResolvedValue({ ...state, reply: 'Who pays?' }),
+    } as unknown as Api
+    render(<BrainStorm api={api} sourceCandidateId="cand-42" />)
+    fireEvent.change(screen.getByLabelText('Target company or industry'), { target: { value: 'clinics' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start brain-storm/ }))
+    await waitFor(() => expect(screen.getByText('Who pays?')).toBeInTheDocument())
+    expect(api.startBrainstorm).toHaveBeenCalledWith({ target: 'clinics', source_candidate_id: 'cand-42' })
+  })
 })
