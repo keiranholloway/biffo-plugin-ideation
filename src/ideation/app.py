@@ -486,6 +486,16 @@ async def finalise_brainstorm_session(
     return _bs_state(session)
 
 
+@app.get("/brainstorm/sessions/{session_id}/research")
+async def read_brainstorm_research(
+    session_id: str,
+    founder: ForwardedUser = Depends(require_founder),
+    svc: BrainstormService = Depends(get_brainstorm_service),
+) -> dict:
+    """The six research angles with their status and findings."""
+    return {"research": await svc.get_research(owner_sub=founder.sub, session_id=session_id)}
+
+
 @app.get("/brainstorm/sessions/{session_id}/opportunities")
 async def read_brainstorm_opportunities(
     session_id: str,

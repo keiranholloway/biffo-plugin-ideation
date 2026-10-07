@@ -145,6 +145,18 @@ export interface BrainstormOpportunity {
   evidence: { url: string; note?: string }[]
 }
 
+export interface ResearchFinding {
+  signal: string
+  why_it_matters: string
+  sources: { url: string; note?: string }[]
+}
+
+export interface ResearchAngle {
+  angle: string
+  status: 'succeeded' | 'failed' | 'malformed' | 'never_started' | 'running'
+  findings: ResearchFinding[]
+}
+
 export type Api = ReturnType<typeof createApi>
 
 // Async on purpose: the token is resolved per request, not snapshotted, so an
@@ -204,6 +216,8 @@ export function createApi(getIdToken: () => string | null | Promise<string | nul
       request<BrainstormState>('POST', `/brainstorm/sessions/${id}/finalise`),
     getBrainstorm: (id: string) =>
       request<BrainstormState>('GET', `/brainstorm/sessions/${id}`),
+    getBrainstormResearch: (id: string) =>
+      request<{ research: ResearchAngle[] }>('GET', `/brainstorm/sessions/${id}/research`),
     getBrainstormOpportunities: (id: string) =>
       request<{ opportunities: BrainstormOpportunity[] }>(
         'GET',
