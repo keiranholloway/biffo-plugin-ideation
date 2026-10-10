@@ -15,5 +15,5 @@ export default defineConfig({
   // crashes on load with "ReferenceError: global is not defined" in any browser.
   define: { global: 'globalThis' },
   build: { outDir: 'dist' },
-  test: { environment: 'jsdom', globals: true, setupFiles: ['./src/test-setup.ts'] },
+  test: { exclude: ['node_modules', 'dist', 'e2e/**'], environment: 'jsdom', globals: true, setupFiles: ['./src/test-setup.ts'] },
 })
