@@ -8,8 +8,12 @@ const UI = '/api/v1/plugins/ideation/ui/'
 const API = '/api/v1/plugins/ideation'
 
 test.skip(
-  !process.env.E2E_BASE_URL || !process.env.E2E_STORAGE_STATE,
-  'set E2E_BASE_URL and E2E_STORAGE_STATE to run against a deployed environment',
+  !process.env.E2E_BASE_URL ||
+    !(
+      process.env.E2E_STORAGE_STATE ||
+      (process.env.E2E_TEST_USERNAME && process.env.E2E_TEST_PASSWORD)
+    ),
+  'set E2E_BASE_URL and either E2E_TEST_USERNAME/E2E_TEST_PASSWORD or E2E_STORAGE_STATE',
 )
 
 async function idToken(page: Page): Promise<string> {
