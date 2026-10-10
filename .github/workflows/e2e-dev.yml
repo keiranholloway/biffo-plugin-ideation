@@ -1,0 +1,49 @@
+name: E2E (dev)
+
+# Drives the Brain-Storm history column (web/e2e/brainstorm-history.spec.ts) on
+# the DEPLOYED dev UI. Not a PR gate: it tests what is deployed, so run it after
+# a deploy of dev (manually, or nightly).
+#
+# Config:
+#   vars.E2E_BASE_URL         dev portal origin
+#   secrets.E2E_TEST_USERNAME dev test persona
+#   secrets.E2E_TEST_PASSWORD dev test persona
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * *'
+
+jobs:
+  e2e:
+    name: Brain-Storm history column (dev)
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    env:
+      E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+      E2E_TEST_USERNAME: ${{ secrets.E2E_TEST_USERNAME }}
+      E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Require config (a skipped spec must not read as green)
+        run: |
+          test -n "$E2E_BASE_URL" && test -n "$E2E_TEST_USERNAME" && test -n "$E2E_TEST_PASSWORD" \
+            || { echo "E2E_BASE_URL var and E2E_TEST_USERNAME/E2E_TEST_PASSWORD secrets are required"; exit 1; }
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: web/test-results
