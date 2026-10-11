@@ -137,9 +137,9 @@ describe('ModelCatalogList', () => {
     expect(setDefaultButtons.length).toBe(1) // Only for the non-default entry
   })
 
-  it('calls onDelete when delete button is clicked', () => {
+  it('calls onDelete after the in-page confirm', async () => {
     const props = noopProps()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const confirmSpy = vi.spyOn(window, 'confirm')
 
     render(
       <ModelCatalogList
@@ -150,9 +150,12 @@ describe('ModelCatalogList', () => {
       />,
     )
 
-    const deleteButtons = screen.getAllByText('Delete')
-    deleteButtons[0].click()
+    screen.getAllByRole('button', { name: 'Delete' })[0].click()
+    await screen.findByText('Delete this entry? This action cannot be undone.')
+    expect(props.onDelete).not.toHaveBeenCalled()
+    within(screen.getByRole('group')).getByRole('button', { name: 'Delete' }).click()
 
+    expect(confirmSpy).not.toHaveBeenCalled()
     expect(props.onDelete).toHaveBeenCalledWith('entry-1')
   })
 

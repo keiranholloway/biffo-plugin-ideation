@@ -245,7 +245,7 @@ describe('App', () => {
       active: true,
     }
     const fetchMock = mockFetch({ effectiveConfig: { agents: [builtin], models: [] } })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const confirmSpy = vi.spyOn(window, 'confirm')
 
     render(<App />)
 
@@ -254,6 +254,11 @@ describe('App', () => {
     })
 
     screen.getByText('Store a copy to edit').click()
+    // In-page confirm, spelling out that the stored row now overrides the default.
+    await waitFor(() => {
+      expect(screen.getByText(/every edit you make here overrides/)).toBeInTheDocument()
+    })
+    screen.getByRole('button', { name: 'Store a copy' }).click()
 
     await waitFor(() => {
       const posted = fetchMock.mock.calls.find(
@@ -263,6 +268,7 @@ describe('App', () => {
       // Verbatim: overriding a default must start as a copy of it, or the row
       // silently changes behaviour the moment it is created.
       expect(JSON.parse(String((posted?.[1] as RequestInit).body))).toEqual(builtin)
+      expect(confirmSpy).not.toHaveBeenCalled()
     })
   })
 })

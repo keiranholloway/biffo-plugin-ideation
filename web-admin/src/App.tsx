@@ -111,15 +111,6 @@ export default function App() {
    * row that overrides it — the trap issue #58 names. */
   async function handleStoreBuiltin(builtin: BuiltinAgent) {
     if (!api) return
-    if (
-      !window.confirm(
-        `Store "${builtin.agent_key}" as an editable row?\n\n` +
-          'It copies the built-in default exactly, so nothing changes now. ' +
-          'From then on the stored row is what runs, and every edit you make ' +
-          'here overrides the built-in default.',
-      )
-    )
-      return
     setError(null)
     try {
       await api.storeBuiltinAgent(builtin)
@@ -142,7 +133,6 @@ export default function App() {
 
   async function handleDeleteAgent(agentKey: string) {
     if (!api) return
-    if (!window.confirm('Delete this agent? This action cannot be undone.')) return
     setError(null)
     try {
       await api.deleteChatAgent(agentKey)
@@ -181,7 +171,6 @@ export default function App() {
 
   async function handleDeleteCatalogEntry(entryId: string) {
     if (!api) return
-    if (!window.confirm('Delete this entry? This action cannot be undone.')) return
     setError(null)
     try {
       await api.deleteModelCatalogEntry(entryId)
@@ -191,12 +180,12 @@ export default function App() {
     }
   }
 
-  if (!ready) return <main className="admin">Loading…</main>
+  if (!ready) return <main className="admin biffo-kit">Loading…</main>
 
   if (!api) {
     return (
-      <main className="admin">
-        <h1>Ideation Engine — Admin</h1>
+      <main className="admin biffo-kit">
+        <h1 className="biffo-heading">Ideation Engine — Admin</h1>
         <p>No session found. Please sign in through the portal.</p>
       </main>
     )
@@ -205,8 +194,8 @@ export default function App() {
   const currentDefault = catalogEntries.find((e) => e.is_default)?.id ?? null
 
   return (
-    <main className="admin">
-      <h1>Ideation Engine — Admin</h1>
+    <main className="admin biffo-kit">
+      <h1 className="biffo-heading">Ideation Engine — Admin</h1>
 
       {error && <div className="admin-error">{error}</div>}
 

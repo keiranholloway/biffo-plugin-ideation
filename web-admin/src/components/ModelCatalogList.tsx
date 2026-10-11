@@ -1,4 +1,6 @@
+import { statusBadgeClass, statusLabel } from '@biffo/design-tokens/status.mjs'
 import type { EffectiveModel, ModelCatalogEntry } from '../lib/api'
+import { ConfirmAction } from './ConfirmAction'
 
 interface ModelCatalogListProps {
   entries: ModelCatalogEntry[]
@@ -99,8 +101,8 @@ export function ModelCatalogList({
               <strong>Model ID:</strong> {entry.model_id}
             </p>
             <p>
-              <strong>Status:</strong> <span className={entry.active ? 'badge-active' : 'badge-inactive'}>
-                {entry.active ? 'Active' : 'Inactive'}
+              <strong>Status:</strong> <span className={statusBadgeClass(entry.active ? 'active' : 'inactive')}>
+                {statusLabel(entry.active ? 'active' : 'inactive')}
               </span>
             </p>
             <p>
@@ -114,7 +116,7 @@ export function ModelCatalogList({
                   which entries a search-dependent agent (e.g. the ideation
                   analyst) can actually be pointed at. */}
               <strong>Web-capable:</strong>{' '}
-              <span className={entry.web_capable ? 'badge-active' : 'badge-inactive'}>
+              <span className={entry.web_capable ? 'biffo-badge biffo-badge--positive' : 'biffo-badge'}>
                 {entry.web_capable ? 'Yes' : 'No'}
               </span>
             </p>
@@ -123,17 +125,16 @@ export function ModelCatalogList({
             {!entry.is_default && (
               <button
                 onClick={() => onSetDefault(entry.id, currentDefault)}
-                className="admin-btn-secondary"
+                className="biffo-confirm__no"
               >
                 Set as Default
               </button>
             )}
-            <button
-              onClick={() => onDelete(entry.id)}
-              className="admin-btn-danger"
-            >
-              Delete
-            </button>
+            <ConfirmAction
+              label="Delete"
+              prompt="Delete this entry? This action cannot be undone."
+              onConfirm={() => onDelete(entry.id)}
+            />
           </div>
         </div>
       ))}
