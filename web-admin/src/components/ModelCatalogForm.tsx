@@ -32,7 +32,7 @@ export function ModelCatalogForm({ onSubmit }: ModelCatalogFormProps) {
     <div className="admin-form-container">
       <button
         onClick={() => setShowForm(!showForm)}
-        className="admin-btn-primary"
+        className="biffo-btn-primary"
       >
         {showForm ? 'Cancel' : 'Add Catalog Entry'}
       </button>
@@ -88,7 +88,7 @@ export function ModelCatalogForm({ onSubmit }: ModelCatalogFormProps) {
             Web-capable (model id carries OpenRouter's ':online' suffix)
           </label>
 
-          <button type="submit" className="admin-btn-primary">
+          <button type="submit" className="biffo-btn-primary">
             Create Entry
           </button>
         </form>

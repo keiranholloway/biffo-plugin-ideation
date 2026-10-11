@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 
 import { AgentList } from './AgentList'
 import type { BuiltinAgent, ChatAgent } from '../lib/api'
@@ -72,15 +72,19 @@ describe('AgentList', () => {
     expect(badges.length).toBeGreaterThan(0)
   })
 
-  it('calls onDelete when delete button is clicked', () => {
+  it('calls onDelete after the in-page confirm', async () => {
     const props = noopProps()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const confirmSpy = vi.spyOn(window, 'confirm')
 
     render(<AgentList agents={mockAgents} builtins={[]} {...props} />)
 
-    const deleteButtons = screen.getAllByText('Delete')
-    deleteButtons[0].click()
+    screen.getAllByRole('button', { name: 'Delete' })[0].click()
+    // Asked in-page, not through a native dialog, and nothing is deleted yet.
+    await screen.findByText('Delete this agent? This action cannot be undone.')
+    expect(props.onDelete).not.toHaveBeenCalled()
+    within(screen.getByRole('group', { name: 'Delete this agent? This action cannot be undone.' })).getByRole('button', { name: 'Delete' }).click()
 
+    expect(confirmSpy).not.toHaveBeenCalled()
     expect(props.onDelete).toHaveBeenCalledWith('agent-1')
   })
 
@@ -112,12 +116,15 @@ describe('AgentList', () => {
     expect(screen.getByText('anthropic/claude-sonnet-4')).toBeInTheDocument()
   })
 
-  it('offers to store a built-in default rather than only "Add New Agent"', () => {
+  it('offers to store a built-in default rather than only "Add New Agent"', async () => {
     const props = noopProps()
 
     render(<AgentList agents={[]} builtins={mockBuiltins} {...props} />)
 
     screen.getByText('Store a copy to edit').click()
+    await screen.findByText(/every edit you make here overrides/)
+    expect(props.onStoreBuiltin).not.toHaveBeenCalled()
+    screen.getByRole('button', { name: 'Store a copy' }).click()
 
     expect(props.onStoreBuiltin).toHaveBeenCalledWith(mockBuiltins[0])
   })

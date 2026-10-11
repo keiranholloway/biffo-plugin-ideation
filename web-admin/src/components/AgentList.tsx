@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { BuiltinAgent, ChatAgent, ModelCatalogEntry } from '../lib/api'
+import { statusBadgeClass, statusLabel } from '@biffo/design-tokens/status.mjs'
+import { ConfirmAction } from './ConfirmAction'
 import { ModelSelect } from './ModelSelect'
 
 interface AgentListProps {
@@ -111,9 +113,18 @@ export function AgentList({
                 </details>
               </div>
               <div className="admin-list-actions">
-                <button onClick={() => onStoreBuiltin(row.agent)} className="admin-btn-secondary">
-                  Store a copy to edit
-                </button>
+                <ConfirmAction
+                  tone="secondary"
+                  label="Store a copy to edit"
+                  confirmLabel="Store a copy"
+                  prompt={
+                    `Store "${row.agent.agent_key}" as an editable row? ` +
+                    'It copies the built-in default exactly, so nothing changes now. ' +
+                    'From then on the stored row is what runs, and every edit you make ' +
+                    'here overrides the built-in default.'
+                  }
+                  onConfirm={() => onStoreBuiltin(row.agent)}
+                />
               </div>
             </div>
           ) : (
@@ -174,10 +185,10 @@ export function AgentList({
                     Active
                   </label>
                   <div className="admin-form-actions">
-                    <button onClick={handleSaveEdit} className="admin-btn-primary">
+                    <button onClick={handleSaveEdit} className="biffo-btn-primary">
                       Save
                     </button>
-                    <button onClick={handleCancel} className="admin-btn-secondary">
+                    <button onClick={handleCancel} className="biffo-confirm__no">
                       Cancel
                     </button>
                   </div>
@@ -205,8 +216,8 @@ export function AgentList({
                     </p>
                     <p>
                       <strong>Status:</strong>{' '}
-                      <span className={row.agent.active ? 'badge-active' : 'badge-inactive'}>
-                        {row.agent.active ? 'Active' : 'Inactive'}
+                      <span className={statusBadgeClass(row.agent.active ? 'active' : 'inactive')}>
+                        {statusLabel(row.agent.active ? 'active' : 'inactive')}
                       </span>
                     </p>
                     {/* Built-in rows have shown their prompt since #60; stored
@@ -218,15 +229,14 @@ export function AgentList({
                     </details>
                   </div>
                   <div className="admin-list-actions">
-                    <button onClick={() => handleEdit(row.agent)} className="admin-btn-secondary">
+                    <button onClick={() => handleEdit(row.agent)} className="biffo-confirm__no">
                       Edit
                     </button>
-                    <button
-                      onClick={() => onDelete(row.agent.agent_key)}
-                      className="admin-btn-danger"
-                    >
-                      Delete
-                    </button>
+                    <ConfirmAction
+                      label="Delete"
+                      prompt="Delete this agent? This action cannot be undone."
+                      onConfirm={() => onDelete(row.agent.agent_key)}
+                    />
                   </div>
                 </>
               )}

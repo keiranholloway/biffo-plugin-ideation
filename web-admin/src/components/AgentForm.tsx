@@ -43,7 +43,7 @@ export function AgentForm({ onSubmit, catalogEntries }: AgentFormProps) {
     <div className="admin-form-container">
       <button
         onClick={() => setShowForm(!showForm)}
-        className="admin-btn-primary"
+        className="biffo-btn-primary"
       >
         {showForm ? 'Cancel' : 'Add New Agent'}
       </button>
@@ -136,7 +136,7 @@ export function AgentForm({ onSubmit, catalogEntries }: AgentFormProps) {
             Active
           </label>
 
-          <button type="submit" className="admin-btn-primary">
+          <button type="submit" className="biffo-btn-primary">
             Create Agent
           </button>
         </form>

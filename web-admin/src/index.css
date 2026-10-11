@@ -1,3 +1,6 @@
+@import '@biffo/design-tokens/tokens.css';
+@import '@biffo/design-tokens/kit.css';
+
 * {
   box-sizing: border-box;
 }
@@ -5,15 +8,15 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 main.admin {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
 }
@@ -27,8 +30,8 @@ p {
 }
 
 .admin-error {
-  background-color: #fee;
-  color: #c00;
+  background-color: var(--state-negative-soft);
+  color: var(--state-negative);
   padding: 1rem;
   border-radius: 4px;
   margin-bottom: 1rem;
@@ -47,21 +50,23 @@ p {
 
 .admin-tab {
   padding: 0.5rem 1rem;
-  border: 1px solid #ccc;
-  background-color: #f5f5f5;
+  border: 1px solid var(--border-strong);
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  border-radius: 0.25rem;
 }
 
 .admin-tab:hover {
-  background-color: #eee;
+  background-color: var(--bg-subtle);
 }
 
 .admin-tab--active {
-  background-color: #007bff;
-  color: white;
-  border-color: #007bff;
+  background-color: var(--text);
+  color: var(--text-invert);
+  border-color: var(--text);
 }
 
 .admin-section {
@@ -110,51 +115,6 @@ p {
 .admin-form textarea {
   resize: vertical;
   font-family: monospace;
-}
-
-.admin-btn-primary,
-.admin-btn-secondary,
-.admin-btn-danger {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
-  margin-right: 0.5rem;
-}
-
-.admin-btn-primary {
-  background-color: #007bff;
-  color: white;
-  border-color: #007bff;
-}
-
-.admin-btn-primary:hover {
-  background-color: #0056b3;
-  border-color: #0056b3;
-}
-
-.admin-btn-secondary {
-  background-color: #6c757d;
-  color: white;
-  border-color: #6c757d;
-}
-
-.admin-btn-secondary:hover {
-  background-color: #545b62;
-  border-color: #545b62;
-}
-
-.admin-btn-danger {
-  background-color: #dc3545;
-  color: white;
-  border-color: #dc3545;
-}
-
-.admin-btn-danger:hover {
-  background-color: #c82333;
-  border-color: #c82333;
 }
 
 .admin-form-actions {
@@ -228,56 +188,56 @@ p {
 }
 
 .badge-active {
-  background-color: #d4edda;
-  color: #155724;
+  background-color: var(--state-positive-soft);
+  color: var(--state-positive);
 }
 
 .badge-inactive {
-  background-color: #f8d7da;
-  color: #721c24;
+  background-color: var(--state-negative-soft);
+  color: var(--state-negative);
 }
 
 .badge-default {
-  background-color: #cfe2ff;
-  color: #084298;
+  background-color: var(--bg-subtle);
+  color: var(--text);
 }
 
 .badge-not-default {
-  background-color: #e2e3e5;
-  color: #383d41;
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
 }
 
 /* Provenance: is this value stored, or a built-in the engine falls back to?
    The panel used to answer neither, and an empty table read as "unconfigured"
    while the built-ins drove every request (issue #58). */
 .badge-builtin {
-  background-color: #fff3cd;
-  color: #664d03;
+  background-color: var(--state-caution-soft);
+  color: var(--state-caution);
 }
 
 .badge-env {
-  background-color: #cfe2ff;
-  color: #084298;
+  background-color: var(--bg-subtle);
+  color: var(--text);
 }
 
 .badge-stored {
-  background-color: #d4edda;
-  color: #155724;
+  background-color: var(--state-positive-soft);
+  color: var(--state-positive);
 }
 
 /* Not "no value chosen" but "this path cannot run": with chat_agents_dynamic
    on, a missing challenger row means Core has nothing to resolve and every
    chat turn 404s (issue #67). It reads as an outage, not a preference. */
 .badge-danger {
-  background-color: #f8d7da;
-  color: #721c24;
+  background-color: var(--state-negative-soft);
+  color: var(--state-negative);
 }
 
 /* We could not read the stored rows, which is a different claim from "nothing
    is stored" — the panel must not turn a cold Core into a false report. */
 .badge-unknown {
-  background-color: #e2e3e5;
-  color: #383d41;
+  background-color: var(--bg-subtle);
+  color: var(--text-muted);
 }
 
 .admin-effective-detail {
@@ -301,7 +261,7 @@ p {
 .admin-warning {
   color: #721c24;
   background-color: #f8d7da;
-  border-left: 3px solid #dc3545;
+  border-left: 3px solid var(--state-negative);
   padding: 0.75rem 1rem;
   border-radius: 4px;
   margin-bottom: 1rem;
