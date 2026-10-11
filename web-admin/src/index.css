@@ -38,7 +38,7 @@ p {
 }
 
 .admin-empty {
-  color: #666;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -74,7 +74,7 @@ p {
 }
 
 .admin-section h2 {
-  border-bottom: 2px solid #ddd;
+  border-bottom: 2px solid var(--border);
   padding-bottom: 0.5rem;
   margin-bottom: 1.5rem;
 }
@@ -84,10 +84,10 @@ p {
 }
 
 .admin-form {
-  background-color: #f9f9f9;
+  background-color: var(--bg-subtle);
   padding: 1.5rem;
   border-radius: 4px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   max-width: 600px;
 }
 
@@ -130,13 +130,13 @@ p {
 }
 
 .admin-list-item {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  background-color: #f9f9f9;
+  background-color: var(--bg-subtle);
 }
 
 .admin-list-content {
@@ -315,10 +315,10 @@ p {
 .sessions-filters label { display: flex; flex-direction: column; font-size: 0.85rem; }
 .sessions-table, .cost-table { width: 100%; border-collapse: collapse; }
 .sessions-table th, .sessions-table td, .cost-table th, .cost-table td {
-  text-align: left; padding: 0.4rem; border-bottom: 1px solid #ddd;
+  text-align: left; padding: 0.4rem; border-bottom: 1px solid var(--border);
 }
-.session-row--deleted { opacity: 0.65; background: #fafafa; }
-.badge--deleted { color: #a00; font-weight: 600; }
-.cost--unpriced { color: #a60; font-style: italic; }
-.link-button { background: none; border: none; color: #06c; cursor: pointer; padding: 0; text-align: left; }
+.session-row--deleted { opacity: 0.65; background: var(--bg-subtle); }
+.badge--deleted { color: var(--state-negative); font-weight: 600; }
+.cost--unpriced { color: var(--state-caution); font-style: italic; }
+.link-button { background: none; border: none; color: var(--brand); cursor: pointer; padding: 0; text-align: left; }
 .transcript, .opportunities { padding-left: 1.2rem; }
