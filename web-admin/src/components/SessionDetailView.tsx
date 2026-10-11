@@ -42,7 +42,7 @@ export function SessionDetailView({
 
   return (
     <div className="session-detail">
-      <button onClick={onBack}>← All sessions</button>
+      <button type="button" className="biffo-confirm__no" onClick={onBack}>← All sessions</button>
       {error && <div className="admin-error">{error}</div>}
       {!detail && !error && <p>Loading…</p>}
       {detail && (
