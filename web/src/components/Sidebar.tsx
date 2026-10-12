@@ -1,3 +1,5 @@
+import { statusBadgeClass, statusLabel } from '@biffo/design-tokens/status.mjs'
+
 import type { SessionSummary } from '../lib/api'
 
 export interface SidebarProps<T = SessionSummary> {
@@ -52,7 +54,7 @@ export function Sidebar<T = SessionSummary>({
   return (
     <nav className="ide-sidebar">
       <div className="ide-sidebar-header">
-        <button className="ide-sidebar-new" onClick={onNewIdea} disabled={disabled}>
+        <button className="biffo-btn-primary ide-sidebar-new" onClick={onNewIdea} disabled={disabled}>
           {newLabel}
         </button>
       </div>
@@ -93,12 +95,14 @@ export function Sidebar<T = SessionSummary>({
                     <span className="ide-sidebar-item-date">
                       {date ? new Date(date).toLocaleDateString() : ''}
                     </span>
-                    <span className={`ide-sidebar-item-status ide-sidebar-item-status--${status}`}>{status}</span>
+                    <span className={`ide-sidebar-item-status ${statusBadgeClass(status)} ide-sidebar-item-status--${status}`}>
+                      {statusLabel(status)}
+                    </span>
                   </div>
                 </button>
                 <button
                   type="button"
-                  className="ide-sidebar-delete"
+                  className="biffo-btn-delete ide-sidebar-delete"
                   aria-label={deleteLabel(session)}
                   onClick={(e) => {
                     e.stopPropagation()
