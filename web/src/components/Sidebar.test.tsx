@@ -18,8 +18,8 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('First idea')).toBeInTheDocument()
     expect(screen.getByText('Second idea')).toBeInTheDocument()
-    expect(screen.getByText('complete')).toBeInTheDocument()
-    expect(screen.getByText('gathering')).toBeInTheDocument()
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.getByText('Gathering')).toBeInTheDocument()
   })
 
   it('shows empty state when there are no sessions', () => {
@@ -166,7 +166,7 @@ describe('Sidebar', () => {
       <Sidebar sessions={sessions} activeId={null} onSelect={onSelect} onNewIdea={onNewIdea} onDelete={onDelete} />,
     )
 
-    const deleteButtons = container.querySelectorAll('.ide-sidebar-delete')
+    const deleteButtons = container.querySelectorAll('.biffo-btn-delete')
     expect(deleteButtons).toHaveLength(2)
   })
 

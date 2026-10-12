@@ -155,7 +155,7 @@ describe('BrainStorm history', () => {
     render(<BrainStorm api={api} />)
     await waitFor(() => expect(screen.getByText('Clinics')).toBeInTheDocument())
     expect(screen.getByText('Vets')).toBeInTheDocument()
-    expect(screen.getByText('qualifying')).toBeInTheDocument()
+    expect(screen.getByText('Qualifying')).toBeInTheDocument()
   })
 
   it('reopens a qualifying session with its transcript and lets the next message send', async () => {

@@ -499,7 +499,7 @@ export function BrainStorm({
                   ))}
                 </ul>
               )}
-              <button type="button" className="ide-cta" onClick={() => void generate()} disabled={busy}>
+              <button type="button" className="biffo-btn-primary ide-cta" onClick={() => void generate()} disabled={busy}>
                 Run research
               </button>
             </div>
