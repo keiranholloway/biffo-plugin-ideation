@@ -89,5 +89,6 @@ button:disabled { background: var(--border-strong); cursor: not-allowed; }
 .ide-tab:hover { background: var(--bg-subtle); }
 /* Kit/portal active-tab colour is --text (near-black), not --brand (indigo). */
 .ide-tab--active { background: var(--text); color: var(--text-invert); border-color: var(--text); font-weight: 600; }
+.ide-tab--active:hover { background: var(--text); color: var(--text-invert); }
 .ide-intake { display: flex; flex-direction: column; gap: 0.5rem; }
 .ide-intake textarea, .ide-intake input { width: 100%; }
