@@ -85,6 +85,9 @@ button:disabled { background: var(--border-strong); cursor: not-allowed; }
 @media (max-width: 560px) { .ide-axes { grid-template-columns: 1fr; } }
 
 .ide-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.ide-tab--active { font-weight: 600; text-decoration: underline; }
+.ide-tab { background: var(--bg); color: var(--text); border: 1px solid var(--border-strong); }
+.ide-tab:hover { background: var(--bg-subtle); }
+/* Kit/portal active-tab colour is --text (near-black), not --brand (indigo). */
+.ide-tab--active { background: var(--text); color: var(--text-invert); border-color: var(--text); font-weight: 600; }
 .ide-intake { display: flex; flex-direction: column; gap: 0.5rem; }
 .ide-intake textarea, .ide-intake input { width: 100%; }
